@@ -15,6 +15,9 @@ export function cloneTreeWithNewIds(node) {
   }
   if (node.image) copy.image = { ...node.image }
   if (node.priority) copy.priority = node.priority
+  if (node.icon) copy.icon = node.icon
+  if (node.note) copy.note = node.note
+  if (node.color) copy.color = node.color
   return copy
 }
 

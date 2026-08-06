@@ -68,7 +68,7 @@
       type="info"
       :closable="false"
       show-icon
-      title="画布操作:滚轮平移,Ctrl/⌘+滚轮缩放,拖拽空白处平移。单击选中用例节点,再次点击切换状态:未执行 → 通过 → 失败 → 阻塞。修改需「保存」后生效,离开前会提醒。"
+      title="快捷键:Tab 子节点,Enter 兄弟节点,F2 编辑,Delete 删除,方向键移动;⌘/Ctrl+C/X/V 复制/剪切/粘贴,⌘/Ctrl+Z 撤销。单击选中用例,再次点击切换状态。修改需「保存」后生效。"
       style="margin-bottom: 12px"
     />
 
@@ -79,27 +79,22 @@
           mode="plan"
           :results="draft.results"
           :selected-id="selectedId"
+          :editing-id="editingId"
           @add-child="onAddChild"
           @remove="onRemove"
           @rename="onRename"
           @cycle-status="onCycleStatus"
           @select="(n) => (selectedId = n.id)"
+          @edit-done="editingId = null"
         />
       </div>
       <template #overlay>
-        <div v-if="selectedCase" class="selected-panel">
-          <div class="sp-title">「{{ selectedCase.title }}」优先级</div>
-          <el-radio-group
-            :model-value="selectedCase.priority || ''"
-            size="small"
-            @update:model-value="onSetPriority"
-          >
-            <el-radio-button value="P0">P0</el-radio-button>
-            <el-radio-button value="P1">P1</el-radio-button>
-            <el-radio-button value="P2">P2</el-radio-button>
-            <el-radio-button value="">无</el-radio-button>
-          </el-radio-group>
-        </div>
+        <SelectedNodePanel
+          v-if="selectedNode"
+          :node="selectedNode"
+          :is-leaf="selectedIsLeaf"
+          @update="onUpdateProp"
+        />
       </template>
     </MindCanvas>
     <el-empty v-else description="没有匹配的用例,请调整过滤条件" />
@@ -119,11 +114,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import MindTreeNode from '../components/MindTreeNode.vue'
 import MindCanvas from '../components/MindCanvas.vue'
+import SelectedNodePanel from '../components/SelectedNodePanel.vue'
+import { useNodeShortcuts } from '../composables/useNodeShortcuts'
 import StatsBar from '../components/StatsBar.vue'
 import { usePlanStore, STATUS_CYCLE } from '../stores/plan'
 import { useLibraryStore } from '../stores/library'
 import { cloneTree, computeStats, caseFilter, filterTree, findNode, genId, getLeaves } from '../utils/tree'
 import { exportXmind } from '../utils/xmind'
+import { fileToImageData } from '../utils/image'
 
 const route = useRoute()
 const store = usePlanStore()
@@ -135,6 +133,10 @@ const plan = computed(() => store.getById(route.params.id))
 const draft = ref(null)
 const dirty = ref(false)
 const selectedId = ref(null)
+const editingId = ref(null)
+/** 撤销/重做栈(在 loadDraft 之前声明,避免立即执行的 watch 触发 TDZ) */
+const undoStack = ref([])
+const redoStack = ref([])
 
 function loadDraft() {
   if (!plan.value) {
@@ -147,6 +149,8 @@ function loadDraft() {
   }
   dirty.value = false
   selectedId.value = null
+  undoStack.value = []
+  redoStack.value = []
 }
 
 // 路由切换或 store 异步加载完成后重建草稿;编辑中(dirty)不被打断
@@ -194,30 +198,82 @@ function clearFilter() {
   priorityFilter.value = []
 }
 
-/* ---------- 选中 case 的优先级 ---------- */
-const selectedCase = computed(() => {
+/* ---------- 选中节点属性(优先级/图标/颜色/备注) ---------- */
+const selectedNode = computed(() => {
   if (!selectedId.value || !draft.value) return null
-  const found = findNode(draft.value.root, selectedId.value)
-  if (!found) return null
-  const isLeaf = !found.node.children || found.node.children.length === 0
-  return isLeaf ? found.node : null
+  return findNode(draft.value.root, selectedId.value)?.node || null
 })
 
-function onSetPriority(p) {
+const selectedIsLeaf = computed(() => {
+  const n = selectedNode.value
+  return !!n && (!n.children || n.children.length === 0)
+})
+
+function onUpdateProp(key, value) {
   const found = findNode(draft.value.root, selectedId.value)
   if (!found) return
-  if (p) found.node.priority = p
-  else delete found.node.priority
+  pushHistory()
+  if (value === null || value === undefined) delete found.node[key]
+  else found.node[key] = value
   markDirty()
+}
+
+/** 粘贴外部图片到选中节点 */
+async function onPasteImage(node, file) {
+  const data = await fileToImageData(file)
+  const found = findNode(draft.value.root, node.id)
+  if (!found) return
+  pushHistory()
+  found.node.image = data
+  markDirty()
+  ElMessage.success(`已插入图片到「${node.title}」(未保存)`)
 }
 
 function markDirty() {
   dirty.value = true
 }
 
+/* ---------- 撤销 / 重做(草稿快照历史) ---------- */
+const MAX_HISTORY = 30
+
+function snapshotDraft() {
+  return JSON.stringify({ root: draft.value.root, results: draft.value.results })
+}
+
+/** 每次草稿变更前调用 */
+function pushHistory() {
+  undoStack.value.push(snapshotDraft())
+  if (undoStack.value.length > MAX_HISTORY) undoStack.value.shift()
+  redoStack.value = []
+}
+
+function restoreDraft(json) {
+  const s = JSON.parse(json)
+  draft.value.root = s.root
+  draft.value.results = s.results
+  selectedId.value = null
+  editingId.value = null
+  markDirty()
+}
+
+async function undoDraft() {
+  if (undoStack.value.length === 0) return false
+  redoStack.value.push(snapshotDraft())
+  restoreDraft(undoStack.value.pop())
+  return true
+}
+
+async function redoDraft() {
+  if (redoStack.value.length === 0) return false
+  undoStack.value.push(snapshotDraft())
+  restoreDraft(redoStack.value.pop())
+  return true
+}
+
 /* ---------- 编辑操作(作用于草稿) ---------- */
 
 function onCycleStatus(node) {
+  pushHistory()
   const current = draft.value.results[node.id] || 'unexecuted'
   const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length]
   draft.value.results[node.id] = next
@@ -228,17 +284,56 @@ function onCycleStatus(node) {
 
 function onAddChild(node) {
   const found = findNode(draft.value.root, node.id)
-  if (!found) return
+  if (!found) return null
+  pushHistory()
   if (!found.node.children) found.node.children = []
   const created = { id: genId(), title: '子主题', children: [] }
   found.node.children.push(created)
   markDirty()
+  return created
+}
+
+function onAddSibling(parent, node) {
+  pushHistory()
+  const created = { id: genId(), title: '子主题', children: [] }
+  const idx = parent.children.findIndex((c) => c.id === node.id)
+  parent.children.splice(idx + 1, 0, created)
+  markDirty()
+  return created
+}
+
+/** 粘贴子树(已是新 id 副本) */
+function onInsertSubtree(parent, subtree) {
+  const found = findNode(draft.value.root, parent.id)
+  if (!found) return null
+  pushHistory()
+  if (!found.node.children) found.node.children = []
+  found.node.children.push(subtree)
+  markDirty()
+  return subtree
 }
 
 function onRename(node, title) {
   const found = findNode(draft.value.root, node.id)
   if (!found) return
+  pushHistory()
   found.node.title = title
+  markDirty()
+}
+
+/** 无确认直接删除(剪切/确认弹窗共用),同时清理执行结果 */
+function removeNodeDirect(node) {
+  const found = findNode(draft.value.root, node.id)
+  if (!found || !found.parent) return
+  pushHistory()
+  const removedIds = []
+  const collect = (n) => {
+    removedIds.push(n.id)
+    ;(n.children || []).forEach(collect)
+  }
+  collect(found.node)
+  removedIds.forEach((rid) => delete draft.value.results[rid])
+  found.parent.children = found.parent.children.filter((c) => c.id !== node.id)
   markDirty()
 }
 
@@ -248,22 +343,11 @@ function onRemove(node) {
     leafCount > 0 ? `该节点包含 ${leafCount} 条用例及其执行结果,确定删除?` : '确定删除该节点?',
     '删除确认',
     { type: 'warning' }
-  ).then(() => {
-    const found = findNode(draft.value.root, node.id)
-    if (!found || !found.parent) return
-    const removedIds = []
-    const collect = (n) => {
-      removedIds.push(n.id)
-      ;(n.children || []).forEach(collect)
-    }
-    collect(found.node)
-    removedIds.forEach((rid) => delete draft.value.results[rid])
-    found.parent.children = found.parent.children.filter((c) => c.id !== node.id)
-    markDirty()
-  })
+  ).then(() => removeNodeDirect(node))
 }
 
 function onSetAll(status) {
+  pushHistory()
   for (const leaf of getLeaves(draft.value.root)) {
     draft.value.results[leaf.id] = status
   }
@@ -332,4 +416,19 @@ function onBeforeUnload(e) {
 
 onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
 onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
+
+/* ---------- xmind 风格快捷键 ---------- */
+useNodeShortcuts({
+  getRoot: () => draft.value?.root,
+  selectedId,
+  editingId,
+  addChild: (parent) => onAddChild(parent),
+  addSibling: (parent, node) => onAddSibling(parent, node),
+  removeNode: onRemove,
+  insertSubtree: (parent, subtree) => onInsertSubtree(parent, subtree),
+  deleteDirect: (node) => removeNodeDirect(node),
+  pasteImage: onPasteImage,
+  undo: undoDraft,
+  redo: redoDraft,
+})
 </script>

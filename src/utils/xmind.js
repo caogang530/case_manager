@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { genId } from './tree'
+import { ICON_BY_KEY, MARKER_TO_ICON } from './nodeProps'
 
 /**
  * 标准 .xmind 文件导入导出。
@@ -53,13 +54,26 @@ async function topicFromJson(topic, zip) {
       node.image = { src: dataUrl, width: topic.image.width, height: topic.image.height }
     }
   }
-  // 从 marker 还原优先级(priority-1/2/3 → P0/P1/P2)
+  // 平台自定义扩展(完整保真):优先于从 XMind 原生字段推导
+  const extra = topic.xcmExtra || {}
+  if (extra.icon) node.icon = extra.icon
+  if (extra.note) node.note = extra.note
+  if (extra.color) node.color = extra.color
+  // 从 marker 还原优先级和图标
   for (const m of topic.markers || []) {
     const p = MARKER_TO_PRIORITY[m.markerId]
-    if (p) {
-      node.priority = p
-      break
-    }
+    if (p && !node.priority) node.priority = p
+    const ic = MARKER_TO_ICON[m.markerId]
+    if (ic && !node.icon) node.icon = ic
+  }
+  // 备注
+  if (!node.note && topic.notes?.plain?.content) {
+    node.note = topic.notes.plain.content
+  }
+  // 节点背景色(XMind topic style)
+  if (!node.color) {
+    const fill = topic.style?.properties?.['svg:fill']
+    if (fill && fill !== 'none') node.color = fill
   }
   const attached = topic.children?.attached || []
   for (const child of attached) {
@@ -89,12 +103,19 @@ async function topicFromXmlElement(el, zip) {
   const markerRefsEl = Array.from(el.children).find((c) => c.localName === 'marker-refs')
   if (markerRefsEl) {
     for (const refEl of Array.from(markerRefsEl.children)) {
-      const p = MARKER_TO_PRIORITY[refEl.getAttribute('marker-id')]
-      if (p) {
-        node.priority = p
-        break
-      }
+      const markerId = refEl.getAttribute('marker-id')
+      const p = MARKER_TO_PRIORITY[markerId]
+      if (p && !node.priority) node.priority = p
+      const ic = MARKER_TO_ICON[markerId]
+      if (ic && !node.icon) node.icon = ic
     }
+  }
+  // XMind 8 的备注:<notes><plain>文本</plain></notes>
+  const notesEl = Array.from(el.children).find((c) => c.localName === 'notes')
+  if (notesEl) {
+    const plainEl = Array.from(notesEl.children).find((c) => c.localName === 'plain')
+    const text = plainEl ? plainEl.textContent : notesEl.textContent
+    if (text?.trim()) node.note = text.trim()
   }
   const childrenEl = Array.from(el.children).find((c) => c.localName === 'children')
   if (childrenEl) {
@@ -158,7 +179,23 @@ function topicToJson(node, results, imageResources) {
   if (statusMarker) markers.push({ markerId: statusMarker })
   const priorityMarker = PRIORITY_TO_MARKER[node.priority]
   if (priorityMarker) markers.push({ markerId: priorityMarker })
+  const iconMarker = node.icon ? ICON_BY_KEY[node.icon]?.marker : null
+  if (iconMarker) markers.push({ markerId: iconMarker })
   if (markers.length) topic.markers = markers
+  // 备注(XMind notes)
+  if (node.note) {
+    topic.notes = { plain: { content: node.note } }
+  }
+  // 节点背景色(XMind topic style)
+  if (node.color) {
+    topic.style = { properties: { 'svg:fill': node.color } }
+  }
+  // 平台自定义扩展,保证 平台 → xmind → 平台 往返无损
+  const extra = {}
+  if (node.icon) extra.icon = node.icon
+  if (node.note) extra.note = node.note
+  if (node.color) extra.color = node.color
+  if (Object.keys(extra).length) topic.xcmExtra = extra
   const imagePath = imageResources?.get(node.id)
   if (imagePath) {
     topic.image = { src: `xap:${imagePath}` }

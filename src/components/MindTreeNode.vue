@@ -10,6 +10,7 @@
         'has-image': !!node.image,
         [`status-${status}`]: isCase && mode === 'plan' && status !== 'unexecuted',
       }"
+      :style="boxStyle"
       @click="onBoxClick"
     >
       <div class="mind-node-main">
@@ -21,6 +22,11 @@
         >
           <span class="case-status" :class="status">{{ STATUS[status].icon }}</span>
         </el-tooltip>
+
+        <!-- 节点图标 -->
+        <span v-if="node.icon && ICON_BY_KEY[node.icon]" class="node-icon">
+          {{ ICON_BY_KEY[node.icon].emoji }}
+        </span>
 
         <!-- 优先级徽章 -->
         <span v-if="node.priority" class="case-priority" :class="node.priority.toLowerCase()">
@@ -35,10 +41,15 @@
           size="small"
           class="mind-node-title-input"
           @keyup.enter="commitEdit"
-          @keyup.esc="editing = false"
+          @keyup.esc="cancelEdit"
           @blur="commitEdit"
           @click.stop
         />
+
+        <!-- 备注标记(悬停查看) -->
+        <el-tooltip v-if="node.note" :content="node.note" placement="top" :show-after="200">
+          <span class="note-flag">📝</span>
+        </el-tooltip>
 
         <!-- 父节点执行进度(计划模式) -->
         <span v-if="!isCase && mode === 'plan' && progress.total > 0" class="node-progress">
@@ -56,13 +67,16 @@
         </span>
       </div>
 
-      <!-- 节点图片 -->
-      <img
+      <!-- 节点图片(点击放大) -->
+      <el-image
         v-if="node.image"
         :src="node.image.src"
         :style="imageStyle"
         class="mind-node-img"
-        alt=""
+        fit="contain"
+        :preview-src-list="[node.image.src]"
+        preview-teleported
+        hide-on-click-modal
         @click.stop
       />
     </div>
@@ -76,11 +90,13 @@
           :mode="mode"
           :results="results"
           :selected-id="selectedId"
+          :editing-id="editingId"
           @add-child="(n) => emit('add-child', n)"
           @remove="(n) => emit('remove', n)"
           @rename="(n, t) => emit('rename', n, t)"
           @cycle-status="(n) => emit('cycle-status', n)"
           @select="(n) => emit('select', n)"
+          @edit-done="emit('edit-done')"
         />
       </div>
     </div>
@@ -88,9 +104,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { STATUS } from '../stores/plan'
 import { computeNodeStats } from '../utils/tree'
+import { ICON_BY_KEY } from '../utils/nodeProps'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -98,13 +115,20 @@ const props = defineProps({
   mode: { type: String, default: 'library' }, // 'library' | 'plan'
   results: { type: Object, default: () => ({}) },
   selectedId: { type: String, default: null },
+  editingId: { type: String, default: null },
 })
 
-const emit = defineEmits(['add-child', 'remove', 'rename', 'cycle-status', 'select'])
+const emit = defineEmits(['add-child', 'remove', 'rename', 'cycle-status', 'select', 'edit-done'])
 
 const isCase = computed(() => !props.node.children || props.node.children.length === 0)
 const status = computed(() => props.results[props.node.id] || 'unexecuted')
 const progress = computed(() => computeNodeStats(props.node, props.results))
+
+/** 节点底色:计划模式下已执行的用例由状态色接管,其余用自定义颜色 */
+const boxStyle = computed(() => {
+  if (props.mode === 'plan' && isCase.value && status.value !== 'unexecuted') return null
+  return props.node.color ? { background: props.node.color, borderColor: props.node.color } : null
+})
 
 /** 图片按原始宽高比缩放到最大 240px 宽 */
 const imageStyle = computed(() => {
@@ -130,11 +154,26 @@ function startEdit() {
   nextTick(() => inputRef.value?.focus())
 }
 
+// 外部(快捷键)请求进入编辑
+watch(
+  () => props.editingId,
+  (id) => {
+    if (id && id === props.node.id && !editing.value) startEdit()
+  }
+)
+
 function commitEdit() {
   if (!editing.value) return
   editing.value = false
   const t = editTitle.value.trim()
   if (t && t !== props.node.title) emit('rename', props.node, t)
+  emit('edit-done')
+}
+
+function cancelEdit() {
+  if (!editing.value) return
+  editing.value = false
+  emit('edit-done')
 }
 
 function onBoxClick() {

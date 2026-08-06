@@ -13,26 +13,32 @@
         </template>
       </el-table-column>
       <el-table-column label="来源用例库" prop="libraryName" min-width="140" />
-      <el-table-column label="通过率" min-width="220">
+      <el-table-column label="执行情况" min-width="280">
         <template #default="{ row }">
-          <div style="display: flex; align-items: center; gap: 8px">
-            <el-progress
-              :percentage="row.stats.passRate"
-              :stroke-width="10"
-              style="flex: 1"
-              :color="passColor(row.stats.passRate)"
-            />
-            <span style="font-size: 12px; color: #909399; white-space: nowrap">
-              {{ row.stats.passed }}/{{ row.stats.total }}
-            </span>
+          <div class="plan-stats">
+            <div class="ps-head">
+              <span class="ps-rate" :style="{ color: passColor(row.stats.passRate) }">
+                {{ row.stats.passRate }}%
+              </span>
+              <span class="ps-total">通过率 · 共 {{ row.stats.total }} 条</span>
+            </div>
+            <div class="ps-bar">
+              <span
+                v-for="seg in segments(row.stats)"
+                :key="seg.key"
+                class="ps-seg"
+                :class="seg.key"
+                :style="{ width: seg.width + '%' }"
+                :title="`${seg.label} ${seg.count}`"
+              />
+            </div>
+            <div class="ps-legend">
+              <span><i class="dot passed" />通过 {{ row.stats.passed }}</span>
+              <span><i class="dot failed" />失败 {{ row.stats.failed }}</span>
+              <span><i class="dot blocked" />阻塞 {{ row.stats.blocked }}</span>
+              <span><i class="dot unexecuted" />未执行 {{ row.stats.unexecuted }}</span>
+            </div>
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="失败/阻塞/未执行" width="150" align="center">
-        <template #default="{ row }">
-          <span style="color: #f56c6c">{{ row.stats.failed }}</span> /
-          <span style="color: #e6a23c">{{ row.stats.blocked }}</span> /
-          <span style="color: #909399">{{ row.stats.unexecuted }}</span>
         </template>
       </el-table-column>
       <el-table-column label="更新时间" width="170">
@@ -108,6 +114,20 @@ function passColor(rate) {
   if (rate >= 70) return '#67c23a'
   if (rate >= 40) return '#e6a23c'
   return '#f56c6c'
+}
+
+/** 分段堆叠条:有数量的状态按占比分段 */
+function segments(stats) {
+  const defs = [
+    { key: 'passed', label: '通过', count: stats.passed },
+    { key: 'failed', label: '失败', count: stats.failed },
+    { key: 'blocked', label: '阻塞', count: stats.blocked },
+    { key: 'unexecuted', label: '未执行', count: stats.unexecuted },
+  ]
+  if (!stats.total) return [{ key: 'unexecuted', label: '未执行', count: 0, width: 100 }]
+  return defs
+    .filter((d) => d.count > 0)
+    .map((d) => ({ ...d, width: Math.max((d.count / stats.total) * 100, 0.8) }))
 }
 
 function openCreate() {

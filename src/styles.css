@@ -179,6 +179,110 @@ body,
   max-width: 360px;
 }
 
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sp-label {
+  font-size: 12px;
+  color: #909399;
+  width: 34px;
+  flex-shrink: 0;
+}
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.icon-opt {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.icon-opt:hover {
+  background: #f0f5ff;
+}
+
+.icon-opt.active {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+
+.color-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.color-opt {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px solid #dcdfe6;
+  box-sizing: border-box;
+}
+
+.color-opt.active {
+  outline: 2px solid #409eff;
+  outline-offset: 1px;
+}
+
+.color-none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #909399;
+  background: #fff;
+}
+
+.sp-note {
+  align-items: flex-start;
+}
+
+.sp-thumb {
+  width: 56px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.sp-note .sp-label {
+  padding-top: 5px;
+}
+
+.sp-note :deep(.el-textarea__inner) {
+  font-size: 12px;
+}
+
+/* 节点图标与备注标记 */
+.node-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.note-flag {
+  font-size: 11px;
+  color: #909399;
+  cursor: help;
+  flex-shrink: 0;
+}
+
 .mind-node-row {
   display: flex;
   align-items: center;
@@ -242,9 +346,16 @@ body,
 .mind-node-img {
   max-width: 240px;
   max-height: 180px;
+  display: block;
+}
+
+.mind-node-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   border-radius: 4px;
   display: block;
-  object-fit: contain;
+  cursor: zoom-in;
 }
 
 .mind-node-title {
@@ -383,14 +494,17 @@ body,
 
 .mind-node-box.status-passed {
   border-color: #67c23a;
+  background: #dcfce7;
 }
 
 .mind-node-box.status-failed {
   border-color: #f56c6c;
+  background: #fee2e2;
 }
 
 .mind-node-box.status-blocked {
   border-color: #e6a23c;
+  background: #fef9c3;
 }
 
 /* 父节点进度 */
@@ -477,3 +591,66 @@ body,
   min-width: 220px;
   max-width: 480px;
 }
+
+/* ---------- 计划列表:分段执行情况条 ---------- */
+.plan-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.ps-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ps-rate {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ps-total {
+  font-size: 12px;
+  color: #909399;
+}
+
+.ps-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f2f5;
+}
+
+.ps-seg {
+  display: block;
+  height: 100%;
+}
+
+.ps-seg.passed { background: #67c23a; }
+.ps-seg.failed { background: #f56c6c; }
+.ps-seg.blocked { background: #e6a23c; }
+.ps-seg.unexecuted { background: #dcdfe6; }
+
+.ps-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #606266;
+  flex-wrap: wrap;
+}
+
+.ps-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.ps-legend .dot.passed { background: #67c23a; }
+.ps-legend .dot.failed { background: #f56c6c; }
+.ps-legend .dot.blocked { background: #e6a23c; }
+.ps-legend .dot.unexecuted { background: #c0c4cc; }
