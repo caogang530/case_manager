@@ -18,7 +18,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "data.db")
+# 数据库路径可用环境变量覆盖(Docker 部署时指向挂载卷,如 /data/data.db)
+DB_PATH = os.environ.get("XCM_DB_PATH", os.path.join(BASE_DIR, "data.db"))
 DIST_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "dist"))
 
 app = FastAPI(title="XMind Case Manager")
@@ -33,6 +34,7 @@ app.add_middleware(
 
 
 def get_conn() -> sqlite3.Connection:
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn

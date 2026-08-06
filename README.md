@@ -91,6 +91,9 @@ xmind_case_manager/
 │   └── views/
 │       ├── LibraryList.vue / LibraryDetail.vue
 │       └── PlanList.vue / PlanDetail.vue
+├── Dockerfile             # 多阶段构建:前端构建 + Python 运行时,数据卷 /data
+├── docker-compose.yml     # compose 一键部署
+├── .dockerignore
 ├── requirements.txt       # Python 依赖
 ├── package.json           # 前端依赖
 ├── vite.config.js         # dev 服务器,/api 代理到 8000
@@ -134,6 +137,29 @@ npm run dev
 ---
 
 ## 生产部署
+
+### 方式零:Docker(推荐,一条命令)
+
+仓库内置多阶段 `Dockerfile`(Node 构建前端 → Python 运行时托管),无需安装任何依赖:
+
+```bash
+# 构建镜像
+docker build -t case-manager .
+
+# 运行(数据持久化到名为 case-data 的卷)
+docker run -d --name case-manager -p 8000:8000 -v case-data:/data case-manager
+```
+
+访问 **http://localhost:8000**。或使用 docker compose:
+
+```bash
+docker compose up -d --build
+```
+
+说明:
+- 容器内数据库位于 `/data/data.db`(通过环境变量 `XCM_DB_PATH` 配置),挂载卷后删容器/重建镜像数据不丢
+- 备份数据:`docker run --rm -v case-data:/data -v $PWD:/backup alpine cp /data/data.db /backup/`
+- 修改端口映射:`-p 8080:8000` 即可改对外端口
 
 ### 方式一：单进程（推荐，最简单）
 
