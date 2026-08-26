@@ -13,6 +13,7 @@ const STATUS_TO_MARKER = {
   passed: 'task-done',
   failed: 'symbol-wrong',
   blocked: 'symbol-pause',
+  skipped: 'symbol-minus',
 }
 
 /** 优先级 → XMind priority marker 映射 */

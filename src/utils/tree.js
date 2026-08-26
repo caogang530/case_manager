@@ -43,17 +43,17 @@ export function getLeaves(root) {
 
 /**
  * 统计树的 case 执行情况
- * results: { [nodeId]: 'passed' | 'failed' | 'blocked' | 'unexecuted' }
+ * results: { [nodeId]: 'passed' | 'failed' | 'blocked' | 'skipped' | 'unexecuted' }
  */
 export function computeStats(root, results = {}) {
-  const stats = { total: 0, passed: 0, failed: 0, blocked: 0, unexecuted: 0 }
+  const stats = { total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, unexecuted: 0 }
   for (const leaf of getLeaves(root)) {
     const s = results[leaf.id] || 'unexecuted'
     stats.total += 1
     if (stats[s] !== undefined) stats[s] += 1
     else stats.unexecuted += 1
   }
-  stats.executed = stats.passed + stats.failed + stats.blocked
+  stats.executed = stats.passed + stats.failed + stats.blocked + stats.skipped
   stats.passRate = stats.total === 0 ? 0 : Math.round((stats.passed / stats.total) * 1000) / 10
   stats.execRate = stats.total === 0 ? 0 : Math.round((stats.executed / stats.total) * 1000) / 10
   return stats

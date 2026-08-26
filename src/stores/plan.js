@@ -8,10 +8,11 @@ export const STATUS = {
   passed: { label: '通过', icon: '✓', type: 'success' },
   failed: { label: '失败', icon: '✗', type: 'danger' },
   blocked: { label: '阻塞', icon: '!', type: 'warning' },
+  skipped: { label: '跳过', icon: '−', type: 'info' },
 }
 
 /** 点击徽章时的状态循环顺序 */
-export const STATUS_CYCLE = ['unexecuted', 'passed', 'failed', 'blocked']
+export const STATUS_CYCLE = ['unexecuted', 'passed', 'failed', 'blocked', 'skipped']
 
 function reportError(action, err) {
   console.error(action, err)

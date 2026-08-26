@@ -36,6 +36,7 @@
               <span><i class="dot passed" />通过 {{ row.stats.passed }}</span>
               <span><i class="dot failed" />失败 {{ row.stats.failed }}</span>
               <span><i class="dot blocked" />阻塞 {{ row.stats.blocked }}</span>
+              <span><i class="dot skipped" />跳过 {{ row.stats.skipped }}</span>
               <span><i class="dot unexecuted" />未执行 {{ row.stats.unexecuted }}</span>
             </div>
           </div>
@@ -122,6 +123,7 @@ function segments(stats) {
     { key: 'passed', label: '通过', count: stats.passed },
     { key: 'failed', label: '失败', count: stats.failed },
     { key: 'blocked', label: '阻塞', count: stats.blocked },
+    { key: 'skipped', label: '跳过', count: stats.skipped },
     { key: 'unexecuted', label: '未执行', count: stats.unexecuted },
   ]
   if (!stats.total) return [{ key: 'unexecuted', label: '未执行', count: 0, width: 100 }]

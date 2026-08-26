@@ -66,21 +66,37 @@
       <el-input
         type="textarea"
         :rows="2"
-        :model-value="node.note || ''"
+        v-model="noteDraft"
         placeholder="添加备注...(失焦保存)"
-        @change="(v) => emit('update', 'note', v.trim() || null)"
+        @blur="commitNote"
       />
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, watch } from 'vue'
 import { NODE_ICONS, NODE_COLORS } from '../utils/nodeProps'
 
-defineProps({
+const props = defineProps({
   node: { type: Object, required: true },
   isLeaf: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update']) // (key, value),value 为 null 表示清除
+
+const noteDraft = ref('')
+
+watch(
+  () => props.node.note,
+  (note) => {
+    noteDraft.value = note || ''
+  },
+  { immediate: true }
+)
+
+function commitNote() {
+  const value = noteDraft.value.trim() || null
+  if (value !== (props.node.note || null)) emit('update', 'note', value)
+}
 </script>

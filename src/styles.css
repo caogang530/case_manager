@@ -286,11 +286,13 @@ body,
 .mind-node-row {
   display: flex;
   align-items: center;
+  width: max-content;
 }
 
 .mind-node-box {
   position: relative;
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
@@ -340,6 +342,7 @@ body,
 .mind-node-main {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
 }
 
@@ -359,9 +362,13 @@ body,
 }
 
 .mind-node-title {
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-block;
+  flex: 0 0 auto;
+  max-width: 540px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
 }
 
 .mind-node-title-input {
@@ -371,6 +378,7 @@ body,
 /* 子节点列 + 连接线 */
 .mind-children {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   justify-content: center;
   margin-left: 48px;
@@ -492,6 +500,11 @@ body,
   background: #e6a23c;
 }
 
+.case-status.skipped {
+  color: #fff;
+  background: #718096;
+}
+
 .mind-node-box.status-passed {
   border-color: #67c23a;
   background: #dcfce7;
@@ -505,6 +518,11 @@ body,
 .mind-node-box.status-blocked {
   border-color: #e6a23c;
   background: #fef9c3;
+}
+
+.mind-node-box.status-skipped {
+  border-color: #718096;
+  background: #edf2f7;
 }
 
 /* 父节点进度 */
@@ -573,6 +591,7 @@ body,
 .stat-dot.passed { background: #67c23a; }
 .stat-dot.failed { background: #f56c6c; }
 .stat-dot.blocked { background: #e6a23c; }
+.stat-dot.skipped { background: #718096; }
 .stat-dot.unexecuted { background: #c0c4cc; }
 
 .stat-value {
@@ -632,6 +651,7 @@ body,
 .ps-seg.passed { background: #67c23a; }
 .ps-seg.failed { background: #f56c6c; }
 .ps-seg.blocked { background: #e6a23c; }
+.ps-seg.skipped { background: #718096; }
 .ps-seg.unexecuted { background: #dcdfe6; }
 
 .ps-legend {
@@ -653,4 +673,5 @@ body,
 .ps-legend .dot.passed { background: #67c23a; }
 .ps-legend .dot.failed { background: #f56c6c; }
 .ps-legend .dot.blocked { background: #e6a23c; }
+.ps-legend .dot.skipped { background: #718096; }
 .ps-legend .dot.unexecuted { background: #c0c4cc; }

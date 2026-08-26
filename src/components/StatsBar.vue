@@ -25,6 +25,9 @@
       <span class="stat-dot blocked" />阻塞 <span class="stat-value">{{ stats.blocked }}</span>
     </div>
     <div class="stat-item">
+      <span class="stat-dot skipped" />跳过 <span class="stat-value">{{ stats.skipped }}</span>
+    </div>
+    <div class="stat-item">
       <span class="stat-dot unexecuted" />未执行 <span class="stat-value">{{ stats.unexecuted }}</span>
     </div>
     <div class="stat-item">

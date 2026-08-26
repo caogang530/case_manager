@@ -109,6 +109,18 @@ xmind_case_manager/
 - Node.js ≥ 18
 - Python 3.13（推荐用 [uv](https://docs.astral.sh/uv/) 管理虚拟环境）
 
+### 0. 一键启动（推荐）
+
+```bash
+./start.sh
+```
+
+自动创建/复用 `.venv`、安装前后端依赖，并同时启动后端(8000)与前端(5173)。访问 **http://localhost:5173**，按 `Ctrl+C` 停止。
+
+```bash
+./start.sh stop    # 清理本项目残留的前后端进程(含手动启动后未退出的)
+```
+
 ### 1. 启动后端（端口 8000)
 
 ```bash

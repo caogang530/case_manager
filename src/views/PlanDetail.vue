@@ -15,6 +15,7 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="passed">全部标记为通过</el-dropdown-item>
+            <el-dropdown-item command="skipped">全部标记为跳过</el-dropdown-item>
             <el-dropdown-item command="unexecuted">全部重置为未执行</el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -48,6 +49,7 @@
         <el-option label="通过" value="passed" />
         <el-option label="失败" value="failed" />
         <el-option label="阻塞" value="blocked" />
+        <el-option label="跳过" value="skipped" />
       </el-select>
       <el-select
         v-model="priorityFilter"
@@ -117,7 +119,7 @@ import MindCanvas from '../components/MindCanvas.vue'
 import SelectedNodePanel from '../components/SelectedNodePanel.vue'
 import { useNodeShortcuts } from '../composables/useNodeShortcuts'
 import StatsBar from '../components/StatsBar.vue'
-import { usePlanStore, STATUS_CYCLE } from '../stores/plan'
+import { usePlanStore, STATUS, STATUS_CYCLE } from '../stores/plan'
 import { useLibraryStore } from '../stores/library'
 import { cloneTree, computeStats, caseFilter, filterTree, findNode, genId, getLeaves } from '../utils/tree'
 import { exportXmind } from '../utils/xmind'
@@ -134,6 +136,8 @@ const draft = ref(null)
 const dirty = ref(false)
 const selectedId = ref(null)
 const editingId = ref(null)
+// 筛选结果使用操作前的状态快照,避免操作节点状态后节点立即被筛掉。
+const filterResultsSnapshot = ref({})
 /** 撤销/重做栈(在 loadDraft 之前声明,避免立即执行的 watch 触发 TDZ) */
 const undoStack = ref([])
 const redoStack = ref([])
@@ -147,6 +151,7 @@ function loadDraft() {
     root: cloneTree(plan.value.root),
     results: { ...plan.value.results },
   }
+  filterResultsSnapshot.value = { ...draft.value.results }
   dirty.value = false
   selectedId.value = null
   undoStack.value = []
@@ -178,6 +183,16 @@ const filtering = computed(
     priorityFilter.value.length > 0
 )
 
+function refreshFilterSnapshot() {
+  filterResultsSnapshot.value = draft.value ? { ...draft.value.results } : {}
+}
+
+watch(
+  [keyword, statusFilter, priorityFilter],
+  refreshFilterSnapshot,
+  { deep: true, flush: 'sync' }
+)
+
 const filteredRoot = computed(() => {
   if (!draft.value) return null
   if (!filtering.value) return draft.value.root
@@ -185,7 +200,7 @@ const filteredRoot = computed(() => {
     draft.value.root,
     caseFilter(
       { keyword: keyword.value, priorities: priorityFilter.value, statuses: statusFilter.value },
-      draft.value.results
+      filterResultsSnapshot.value
     )
   )
 })
@@ -278,7 +293,7 @@ function onCycleStatus(node) {
   const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length]
   draft.value.results[node.id] = next
   markDirty()
-  const label = { passed: '通过', failed: '失败', blocked: '阻塞', unexecuted: '未执行' }[next]
+  const label = STATUS[next].label
   ElMessage({ message: `「${node.title}」→ ${label}(未保存)`, type: next === 'failed' ? 'error' : next === 'passed' ? 'success' : 'info', duration: 1200 })
 }
 
@@ -352,7 +367,8 @@ function onSetAll(status) {
     draft.value.results[leaf.id] = status
   }
   markDirty()
-  ElMessage.success((status === 'passed' ? '已全部标记为通过' : '已全部重置为未执行') + '(未保存)')
+  const action = status === 'unexecuted' ? '全部重置为未执行' : `全部标记为${STATUS[status].label}`
+  ElMessage.success(`已${action}(未保存)`)
 }
 
 /* ---------- 保存 / 同步 ---------- */
