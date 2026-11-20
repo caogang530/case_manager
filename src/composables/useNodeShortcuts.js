@@ -35,6 +35,8 @@ import { copyNode, hasClipboard, peekClipboard } from '../utils/clipboard'
  */
 export function useNodeShortcuts({
   getRoot,
+  getNavigationRoot = getRoot,
+  isMultiSelecting = () => false,
   selectedId,
   editingId,
   addChild,
@@ -66,7 +68,9 @@ export function useNodeShortcuts({
   }
 
   async function onKeydown(e) {
-    if (dialogOpen() || isTyping()) return
+    if (e.defaultPrevented || dialogOpen() || isTyping()) return
+    if (e.target?.closest?.('[role="menu"], [aria-haspopup="menu"][aria-expanded="true"]')) return
+    if (['Enter', 'Tab', ' '].includes(e.key) && e.target?.closest?.('button, a[href], [role="button"]')) return
     const root = getRoot()
     if (!root) return
     const sel = selectedId.value ? findNode(root, selectedId.value) : null
@@ -98,6 +102,12 @@ export function useNodeShortcuts({
     }
 
     if (e.altKey) return
+    if (e.key === 'Escape') {
+      selectedId.value = null
+      return
+    }
+    const navigationRoot = getNavigationRoot()
+    if (isMultiSelecting() || !navigationRoot) return
 
     /* ---------- 基础编辑键 ---------- */
     switch (e.key) {
@@ -131,9 +141,10 @@ export function useNodeShortcuts({
         break
       }
       case 'ArrowRight': {
-        if (sel && sel.node.children?.length) {
+        const visible = sel && findNode(navigationRoot, sel.node.id)
+        if (visible?.node.children?.length) {
           e.preventDefault()
-          selectedId.value = sel.node.children[0].id
+          selectedId.value = visible.node.children[0].id
         }
         break
       }
@@ -146,19 +157,16 @@ export function useNodeShortcuts({
       }
       case 'ArrowUp':
       case 'ArrowDown': {
-        if (sel?.parent) {
+        const visible = sel && findNode(navigationRoot, sel.node.id)
+        if (visible?.parent) {
           e.preventDefault()
-          const siblings = sel.parent.children
+          const siblings = visible.parent.children
           const idx = siblings.findIndex((c) => c.id === sel.node.id)
           const next = e.key === 'ArrowUp' ? idx - 1 : idx + 1
           if (next >= 0 && next < siblings.length) {
             selectedId.value = siblings[next].id
           }
         }
-        break
-      }
-      case 'Escape': {
-        selectedId.value = null
         break
       }
     }
@@ -170,7 +178,7 @@ export function useNodeShortcuts({
    * - 否则 → 粘贴内部剪贴板的子树
    */
   async function onPaste(e) {
-    if (dialogOpen() || isTyping()) return
+    if (dialogOpen() || isTyping() || isMultiSelecting() || !getNavigationRoot()) return
     const root = getRoot()
     if (!root) return
     const sel = selectedId.value ? findNode(root, selectedId.value) : null

@@ -6,7 +6,7 @@
     @wheel.prevent="onWheel"
     @mousedown="onMouseDown"
   >
-    <div class="mind-canvas" :style="canvasStyle">
+    <div ref="canvasRef" class="mind-canvas" :style="canvasStyle">
       <slot />
     </div>
     <!-- 悬浮层(不随画布缩放/平移) -->
@@ -23,11 +23,12 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 const emit = defineEmits(['blank-click'])
 
 const viewportRef = ref(null)
+const canvasRef = ref(null)
 const scale = ref(1)
 const x = ref(0)
 const y = ref(0)
@@ -105,12 +106,18 @@ function onMouseMove(e) {
 }
 
 function onMouseUp() {
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
+  stopTrackingPan()
   // 几乎没移动视为点击空白 → 取消选中
   if (isPanning.value && moved < 4) emit('blank-click')
   isPanning.value = false
 }
+
+function stopTrackingPan() {
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', onMouseUp)
+}
+
+onBeforeUnmount(stopTrackingPan)
 
 function resetZoom() {
   scale.value = 1
@@ -135,5 +142,20 @@ function fit() {
   y.value = (vp.clientHeight - h * s) / 2
 }
 
-defineExpose({ fit, resetZoom })
+/** 在 100% 缩放下定位单个节点，避免大量匹配结果把文字缩得过小。 */
+function focusNode(id) {
+  const viewport = viewportRef.value
+  const canvas = canvasRef.value
+  const node = id && canvas?.querySelector(`[data-node-id="${CSS.escape(id)}"]`)
+  if (!viewport || !node) return
+  const nodeRect = node.getBoundingClientRect()
+  const canvasRect = canvas.getBoundingClientRect()
+  const nodeX = (nodeRect.left - canvasRect.left + nodeRect.width / 2) / scale.value
+  const nodeY = (nodeRect.top - canvasRect.top + nodeRect.height / 2) / scale.value
+  x.value = viewport.clientWidth / 2 - nodeX
+  y.value = viewport.clientHeight / 2 - nodeY
+  scale.value = 1
+}
+
+defineExpose({ fit, resetZoom, focusNode })
 </script>

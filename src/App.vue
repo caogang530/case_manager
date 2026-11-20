@@ -36,9 +36,9 @@ const libraryStore = useLibraryStore()
 const planStore = usePlanStore()
 
 onMounted(async () => {
+  void planStore.load()
   try {
     await libraryStore.load()
-    await planStore.load()
   } catch (err) {
     console.error('加载数据失败', err)
     ElMessage.error('无法连接后端服务,请先启动:source .venv/bin/activate && python server/main.py')

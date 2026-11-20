@@ -3,25 +3,39 @@
     <!-- 节点本体 -->
     <div
       class="mind-node-box"
+      :data-node-id="node.id"
       :class="{
         'is-root': depth === 0,
         'is-case': isCase && mode === 'plan',
-        'is-selected': selectedId === node.id,
+        'is-selected': selectedId === node.id || selectedIds?.has(node.id),
         'has-image': !!node.image,
         [`status-${status}`]: isCase && mode === 'plan' && status !== 'unexecuted',
       }"
       :style="boxStyle"
       @click="onBoxClick"
+      @dblclick.stop="startEdit"
     >
       <div class="mind-node-main">
         <!-- 叶子 case 状态徽章(计划模式) -->
-        <el-tooltip
-          v-if="isCase && mode === 'plan'"
-          :content="`状态:${STATUS[status].label}(点击切换)`"
-          placement="top"
-        >
-          <span class="case-status" :class="status">{{ STATUS[status].icon }}</span>
-        </el-tooltip>
+        <span v-if="isCase && mode === 'plan'" class="case-status-control" @click.stop @dblclick.stop>
+          <el-dropdown trigger="click" :persistent="false" @command="emit('set-status', node, $event)">
+            <button
+              type="button"
+              class="case-status"
+              :class="status"
+              :aria-label="`${node.title}，当前状态：${STATUS[status].label}，更改状态`"
+            >
+              {{ STATUS[status].label }} <el-icon aria-hidden="true"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="(option, value) in STATUS" :key="value" :command="value" :disabled="value === status">
+                  {{ option.label }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </span>
 
         <!-- 节点图标 -->
         <span v-if="node.icon && ICON_BY_KEY[node.icon]" class="node-icon">
@@ -33,7 +47,7 @@
           {{ node.priority }}
         </span>
 
-        <span v-if="!editing" class="mind-node-title" @dblclick.stop="startEdit">{{ node.title }}</span>
+        <span v-if="!editing" class="mind-node-title">{{ node.title }}</span>
         <el-input
           v-else
           ref="inputRef"
@@ -44,6 +58,7 @@
           @keyup.esc="cancelEdit"
           @blur="commitEdit"
           @click.stop
+          @dblclick.stop
         />
 
         <!-- 备注标记(悬停查看) -->
@@ -57,7 +72,7 @@
         </span>
 
         <!-- 操作按钮 -->
-        <span class="node-ops">
+        <span class="node-ops" @dblclick.stop>
           <el-tooltip content="添加子节点" placement="top">
             <span class="op-btn" @click.stop="emit('add-child', node)">＋</span>
           </el-tooltip>
@@ -78,6 +93,7 @@
         preview-teleported
         hide-on-click-modal
         @click.stop
+        @dblclick.stop
       />
     </div>
 
@@ -90,12 +106,13 @@
           :mode="mode"
           :results="results"
           :selected-id="selectedId"
+          :selected-ids="selectedIds"
           :editing-id="editingId"
           @add-child="(n) => emit('add-child', n)"
           @remove="(n) => emit('remove', n)"
           @rename="(n, t) => emit('rename', n, t)"
-          @cycle-status="(n) => emit('cycle-status', n)"
-          @select="(n) => emit('select', n)"
+          @set-status="(n, value) => emit('set-status', n, value)"
+          @select="(n, e) => emit('select', n, e)"
           @edit-done="emit('edit-done')"
         />
       </div>
@@ -105,6 +122,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { STATUS } from '../stores/plan'
 import { computeNodeStats } from '../utils/tree'
 import { ICON_BY_KEY } from '../utils/nodeProps'
@@ -115,10 +133,11 @@ const props = defineProps({
   mode: { type: String, default: 'library' }, // 'library' | 'plan'
   results: { type: Object, default: () => ({}) },
   selectedId: { type: String, default: null },
+  selectedIds: { type: Set, default: null },
   editingId: { type: String, default: null },
 })
 
-const emit = defineEmits(['add-child', 'remove', 'rename', 'cycle-status', 'select', 'edit-done'])
+const emit = defineEmits(['add-child', 'remove', 'rename', 'set-status', 'select', 'edit-done'])
 
 const isCase = computed(() => !props.node.children || props.node.children.length === 0)
 const status = computed(() => props.results[props.node.id] || 'unexecuted')
@@ -149,6 +168,7 @@ const editTitle = ref('')
 const inputRef = ref(null)
 
 function startEdit() {
+  if (editing.value) return
   editTitle.value = props.node.title
   editing.value = true
   nextTick(() => inputRef.value?.focus())
@@ -176,13 +196,8 @@ function cancelEdit() {
   emit('edit-done')
 }
 
-function onBoxClick() {
+function onBoxClick(event) {
   if (editing.value) return
-  // 计划模式下的用例节点:只有已选中时再次点击才切换状态
-  if (props.mode === 'plan' && isCase.value && props.selectedId === props.node.id) {
-    emit('cycle-status', props.node)
-    return
-  }
-  emit('select', props.node)
+  emit('select', props.node, event)
 }
 </script>

@@ -29,7 +29,8 @@
       >
         <el-option v-for="p in ['P0', 'P1', 'P2']" :key="p" :label="p" :value="p" />
       </el-select>
-      <span v-if="filtering" class="filter-match-count">匹配 {{ matchCount }}/{{ caseCount }} 条</span>
+      <span v-if="filtering" class="filter-match-count" role="status">匹配 {{ visibleCases.length }}/{{ caseCount }} 条</span>
+      <el-button v-if="filtering && visibleCases.length" text type="primary" size="small" @click="locateFirstMatch">定位首条</el-button>
       <el-button v-if="filtering" text type="primary" size="small" @click="clearFilter">清除过滤</el-button>
     </div>
 
@@ -40,7 +41,7 @@
       title="快捷键:Tab 子节点,Enter 兄弟节点,F2 编辑,Delete 删除,方向键移动;⌘/Ctrl+C/X/V 复制/剪切/粘贴(剪贴板含截图时直接插入选中节点),⌘/Ctrl+Z 撤销。图片点击可放大。"
       style="margin-bottom: 12px"
     />
-    <MindCanvas v-if="filteredRoot" @blank-click="selectedId = null">
+    <MindCanvas v-if="filteredRoot" ref="canvasRef" @blank-click="selectedId = null">
       <div class="mind-tree">
         <MindTreeNode
           :node="filteredRoot"
@@ -73,7 +74,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MindTreeNode from '../components/MindTreeNode.vue'
@@ -104,7 +105,17 @@ const filteredRoot = computed(() => {
   }))
 })
 
-const matchCount = computed(() => (filteredRoot.value ? getLeaves(filteredRoot.value).length : 0))
+const canvasRef = ref(null)
+const visibleCases = computed(() => (filteredRoot.value ? getLeaves(filteredRoot.value) : []))
+
+function locateFirstMatch() {
+  canvasRef.value?.focusNode(visibleCases.value[0]?.id)
+}
+
+watch([keyword, priorityFilter], () => {
+  if (filtering.value) locateFirstMatch()
+  else canvasRef.value?.resetZoom()
+}, { deep: true, flush: 'post' })
 
 function clearFilter() {
   keyword.value = ''
@@ -114,6 +125,10 @@ function clearFilter() {
 /* ---------- 选中 + 节点属性 ---------- */
 const selectedId = ref(null)
 const editingId = ref(null)
+
+watch(filteredRoot, (root) => {
+  if (selectedId.value && (!root || !findNode(root, selectedId.value))) selectedId.value = null
+}, { flush: 'post' })
 
 const selectedNode = computed(() => {
   if (!selectedId.value || !library.value) return null
@@ -164,6 +179,7 @@ async function onRename(node, title) {
 /* ---------- xmind 风格快捷键 ---------- */
 useNodeShortcuts({
   getRoot: () => library.value?.root,
+  getNavigationRoot: () => filteredRoot.value,
   selectedId,
   editingId,
   addChild: (parent) => store.addChild(library.value.id, parent.id),

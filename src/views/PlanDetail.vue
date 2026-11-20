@@ -7,10 +7,10 @@
       <el-tag v-if="dirty" type="warning" effect="dark">未保存</el-tag>
       <span class="spacer" />
       <el-button size="small" type="primary" :disabled="!dirty" @click="onSave">保存</el-button>
-      <el-button size="small" @click="onSync">同步到用例库</el-button>
-      <el-dropdown @command="onSetAll">
+      <el-button size="small" :disabled="!libraryStore.loaded" @click="onSync">同步到用例库</el-button>
+      <el-dropdown trigger="click" @command="onSetAll">
         <el-button size="small">
-          批量标记<el-icon style="margin-left: 4px"><arrow-down /></el-icon>
+          整份计划标记<el-icon style="margin-left: 4px"><arrow-down /></el-icon>
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
@@ -62,31 +62,53 @@
       >
         <el-option v-for="p in ['P0', 'P1', 'P2']" :key="p" :label="p" :value="p" />
       </el-select>
-      <span v-if="filtering" class="filter-match-count">匹配 {{ matchCount }}/{{ stats.total }} 条</span>
+      <span v-if="filtering" class="filter-match-count" role="status">匹配 {{ visibleCases.length }}/{{ stats.total }} 条</span>
+      <el-button v-if="filtering && visibleCases.length" text type="primary" size="small" @click="locateFirstMatch">定位首条</el-button>
+      <el-button v-if="statusFilter.length" text type="primary" size="small" title="按修改后的状态重新筛选" @click="reapplyFilters">刷新匹配</el-button>
       <el-button v-if="filtering" text type="primary" size="small" @click="clearFilter">清除过滤</el-button>
+    </div>
+
+    <div class="plan-selection-bar">
+      <el-button size="small" :disabled="!visibleCases.length" @click="selectVisibleCases">
+        {{ filtering ? '全选匹配用例' : '全选用例' }}
+      </el-button>
+      <el-dropdown trigger="click" :disabled="!selectedCases.length" @command="onSetSelected">
+        <el-button size="small" :disabled="!selectedCases.length">
+          标记所选<el-icon style="margin-left: 4px"><arrow-down /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-for="(option, value) in STATUS" :key="value" :command="value">
+              {{ option.label }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <span v-if="selectedCases.length" role="status">已选 {{ selectedCases.length }} 条</span>
+      <el-button v-if="selection.size" text size="small" @click="selectedId = null">清除选择</el-button>
     </div>
 
     <el-alert
       type="info"
       :closable="false"
       show-icon
-      title="快捷键:Tab 子节点,Enter 兄弟节点,F2 编辑,Delete 删除,方向键移动;⌘/Ctrl+C/X/V 复制/剪切/粘贴,⌘/Ctrl+Z 撤销。单击选中用例,再次点击切换状态。修改需「保存」后生效。"
+      title="双击或 F2 编辑标题，点击状态标签选择结果。⌘/Ctrl + 点击多选，Shift + 点击选范围。修改后请保存。"
       style="margin-bottom: 12px"
     />
 
-    <MindCanvas v-if="filteredRoot" @blank-click="selectedId = null">
+    <MindCanvas v-if="filteredRoot" ref="canvasRef" @blank-click="selectedId = null">
       <div class="mind-tree">
         <MindTreeNode
           :node="filteredRoot"
           mode="plan"
           :results="draft.results"
-          :selected-id="selectedId"
+          :selected-ids="selection"
           :editing-id="editingId"
           @add-child="onAddChild"
           @remove="onRemove"
           @rename="onRename"
-          @cycle-status="onCycleStatus"
-          @select="(n) => (selectedId = n.id)"
+          @set-status="(node, status) => setCaseResults([node], status)"
+          @select="onSelect"
           @edit-done="editingId = null"
         />
       </div>
@@ -101,6 +123,15 @@
     </MindCanvas>
     <el-empty v-else description="没有匹配的用例,请调整过滤条件" />
   </div>
+  <div v-else-if="!store.loaded && !store.loadError" class="page-card plan-loading" role="status">
+    正在加载测试计划…
+  </div>
+  <el-result v-else-if="store.loadError" icon="error" title="测试计划加载失败" sub-title="请检查后端服务，然后重试。">
+    <template #extra>
+      <el-button type="primary" @click="store.load()">重试</el-button>
+      <el-button @click="$router.push('/plans')">返回列表</el-button>
+    </template>
+  </el-result>
   <el-result v-else icon="warning" title="测试计划不存在">
     <template #extra>
       <el-button type="primary" @click="$router.push('/plans')">返回列表</el-button>
@@ -109,7 +140,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -119,9 +150,9 @@ import MindCanvas from '../components/MindCanvas.vue'
 import SelectedNodePanel from '../components/SelectedNodePanel.vue'
 import { useNodeShortcuts } from '../composables/useNodeShortcuts'
 import StatsBar from '../components/StatsBar.vue'
-import { usePlanStore, STATUS, STATUS_CYCLE } from '../stores/plan'
+import { usePlanStore, STATUS } from '../stores/plan'
 import { useLibraryStore } from '../stores/library'
-import { cloneTree, computeStats, caseFilter, filterTree, findNode, genId, getLeaves } from '../utils/tree'
+import { cloneTree, computeStats, caseFilter, filterTree, findNode, genId, getLeaves, walkTree } from '../utils/tree'
 import { exportXmind } from '../utils/xmind'
 import { fileToImageData } from '../utils/image'
 
@@ -134,8 +165,17 @@ const plan = computed(() => store.getById(route.params.id))
 /** 草稿:所有编辑先在草稿上进行,保存后才写入 store */
 const draft = ref(null)
 const dirty = ref(false)
-const selectedId = ref(null)
+const selection = ref(new Set())
+const selectionAnchor = ref(null)
+const selectedId = computed({
+  get: () => (selection.value.size === 1 ? selection.value.values().next().value : null),
+  set: (id) => {
+    selection.value = new Set(id ? [id] : [])
+    selectionAnchor.value = id
+  },
+})
 const editingId = ref(null)
+const canvasRef = ref(null)
 // 筛选结果使用操作前的状态快照,避免操作节点状态后节点立即被筛掉。
 const filterResultsSnapshot = ref({})
 /** 撤销/重做栈(在 loadDraft 之前声明,避免立即执行的 watch 触发 TDZ) */
@@ -154,6 +194,7 @@ function loadDraft() {
   filterResultsSnapshot.value = { ...draft.value.results }
   dirty.value = false
   selectedId.value = null
+  editingId.value = null
   undoStack.value = []
   redoStack.value = []
 }
@@ -205,7 +246,68 @@ const filteredRoot = computed(() => {
   )
 })
 
-const matchCount = computed(() => (filteredRoot.value ? getLeaves(filteredRoot.value).length : 0))
+const visibleCases = computed(() => (filteredRoot.value ? getLeaves(filteredRoot.value) : []))
+const visibleNodeIds = computed(() => {
+  const ids = new Set()
+  if (filteredRoot.value) walkTree(filteredRoot.value, (node) => ids.add(node.id))
+  return ids
+})
+const selectedCases = computed(() => visibleCases.value.filter((node) => selection.value.has(node.id)))
+
+function locateFirstMatch() {
+  canvasRef.value?.focusNode(visibleCases.value[0]?.id)
+}
+
+async function reapplyFilters() {
+  refreshFilterSnapshot()
+  await nextTick()
+  locateFirstMatch()
+}
+
+watch([keyword, statusFilter, priorityFilter], () => {
+  if (filtering.value) locateFirstMatch()
+  else canvasRef.value?.resetZoom()
+}, { deep: true, flush: 'post' })
+
+watch(visibleNodeIds, (visibleIds) => {
+  if (!selection.value.size) return
+  const allowedIds = selection.value.size > 1
+    ? new Set(visibleCases.value.map((node) => node.id))
+    : visibleIds
+  const remaining = [...selection.value].filter((id) => allowedIds.has(id))
+  if (remaining.length !== selection.value.size) selection.value = new Set(remaining)
+  if (!visibleIds.has(selectionAnchor.value)) selectionAnchor.value = null
+}, { flush: 'post' })
+
+function selectVisibleCases() {
+  selection.value = new Set(visibleCases.value.map((node) => node.id))
+  selectionAnchor.value = visibleCases.value[0]?.id ?? null
+}
+
+function onSelect(node, event) {
+  const toggle = event.metaKey || event.ctrlKey
+  if (!toggle && !event.shiftKey) {
+    selectedId.value = node.id
+    return
+  }
+  if (node.children?.length) return
+
+  if (event.shiftKey) {
+    const start = visibleCases.value.findIndex((item) => item.id === selectionAnchor.value)
+    const end = visibleCases.value.findIndex((item) => item.id === node.id)
+    if (start >= 0 && end >= 0) {
+      const range = visibleCases.value.slice(Math.min(start, end), Math.max(start, end) + 1)
+      selection.value = new Set(range.map((item) => item.id))
+      return
+    }
+  }
+
+  const next = new Set(toggle ? selectedCases.value.map((item) => item.id) : [])
+  if (next.has(node.id)) next.delete(node.id)
+  else next.add(node.id)
+  selection.value = next
+  selectionAnchor.value = node.id
+}
 
 function clearFilter() {
   keyword.value = ''
@@ -287,14 +389,18 @@ async function redoDraft() {
 
 /* ---------- 编辑操作(作用于草稿) ---------- */
 
-function onCycleStatus(node) {
+function setCaseResults(cases, status) {
+  if (!Object.hasOwn(STATUS, status)) return
+  const changed = cases.filter((node) => (draft.value.results[node.id] || 'unexecuted') !== status)
+  if (!changed.length) return
   pushHistory()
-  const current = draft.value.results[node.id] || 'unexecuted'
-  const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length]
-  draft.value.results[node.id] = next
+  for (const node of changed) draft.value.results[node.id] = status
   markDirty()
-  const label = STATUS[next].label
-  ElMessage({ message: `「${node.title}」→ ${label}(未保存)`, type: next === 'failed' ? 'error' : next === 'passed' ? 'success' : 'info', duration: 1200 })
+  ElMessage.success(`已将 ${changed.length} 条用例标记为${STATUS[status].label}（未保存）`)
+}
+
+function onSetSelected(status) {
+  setCaseResults(selectedCases.value, status)
 }
 
 function onAddChild(node) {
@@ -353,7 +459,9 @@ function removeNodeDirect(node) {
 }
 
 function onRemove(node) {
-  const leafCount = getLeaves(node).length
+  const found = findNode(draft.value.root, node.id)
+  if (!found?.parent) return
+  const leafCount = getLeaves(found.node).length
   ElMessageBox.confirm(
     leafCount > 0 ? `该节点包含 ${leafCount} 条用例及其执行结果,确定删除?` : '确定删除该节点?',
     '删除确认',
@@ -361,14 +469,18 @@ function onRemove(node) {
   ).then(() => removeNodeDirect(node))
 }
 
-function onSetAll(status) {
-  pushHistory()
-  for (const leaf of getLeaves(draft.value.root)) {
-    draft.value.results[leaf.id] = status
+async function onSetAll(status) {
+  const cases = getLeaves(draft.value.root)
+  try {
+    await ElMessageBox.confirm(
+      `将整份计划的 ${cases.length} 条用例标记为「${STATUS[status].label}」，包括筛选隐藏的用例。`,
+      '整份计划标记',
+      { type: 'warning', confirmButtonText: '确认标记', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
   }
-  markDirty()
-  const action = status === 'unexecuted' ? '全部重置为未执行' : `全部标记为${STATUS[status].label}`
-  ElMessage.success(`已${action}(未保存)`)
+  setCaseResults(cases, status)
 }
 
 /* ---------- 保存 / 同步 ---------- */
@@ -436,6 +548,8 @@ onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 /* ---------- xmind 风格快捷键 ---------- */
 useNodeShortcuts({
   getRoot: () => draft.value?.root,
+  getNavigationRoot: () => filteredRoot.value,
+  isMultiSelecting: () => selection.value.size > 1,
   selectedId,
   editingId,
   addChild: (parent) => onAddChild(parent),

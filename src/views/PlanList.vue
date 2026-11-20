@@ -3,10 +3,16 @@
     <div class="page-toolbar">
       <h3 style="margin: 0">测试计划</h3>
       <span class="spacer" />
-      <el-button type="primary" @click="openCreate">新建测试计划</el-button>
+      <el-button type="primary" :disabled="!store.loaded || !libraryStore.loaded" @click="openCreate">新建测试计划</el-button>
     </div>
 
-    <el-table :data="plansWithStats" empty-text="还没有测试计划,点击右上角从用例库创建">
+    <div v-if="!store.loaded && !store.loadError" class="plan-loading" role="status">正在加载测试计划…</div>
+    <el-result v-else-if="store.loadError" icon="error" title="测试计划加载失败">
+      <template #extra>
+        <el-button type="primary" @click="store.load()">重试</el-button>
+      </template>
+    </el-result>
+    <el-table v-else :data="plansWithStats" empty-text="还没有测试计划,点击右上角从用例库创建">
       <el-table-column label="名称" min-width="200">
         <template #default="{ row }">
           <el-link type="primary" @click="$router.push(`/plans/${row.id}`)">{{ row.name }}</el-link>

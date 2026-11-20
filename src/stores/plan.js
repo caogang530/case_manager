@@ -11,9 +11,6 @@ export const STATUS = {
   skipped: { label: '跳过', icon: '−', type: 'info' },
 }
 
-/** 点击徽章时的状态循环顺序 */
-export const STATUS_CYCLE = ['unexecuted', 'passed', 'failed', 'blocked', 'skipped']
-
 function reportError(action, err) {
   console.error(action, err)
   ElMessage.error(`${action}失败:${err.message}(请确认后端服务已启动)`)
@@ -23,6 +20,8 @@ export const usePlanStore = defineStore('plan', {
   state: () => ({
     plans: [],
     loaded: false,
+    loading: false,
+    loadError: false,
   }),
   getters: {
     getById: (state) => (id) => state.plans.find((p) => p.id === id),
@@ -33,9 +32,19 @@ export const usePlanStore = defineStore('plan', {
   },
   actions: {
     async load() {
-      this.plans = await api.getPlans()
-      this.loaded = true
-      await this.migrateLegacy()
+      if (this.loading || this.loaded) return
+      this.loading = true
+      this.loadError = false
+      try {
+        this.plans = await api.getPlans()
+        await this.migrateLegacy()
+        this.loaded = true
+      } catch (err) {
+        console.error('加载测试计划失败', err)
+        this.loadError = true
+      } finally {
+        this.loading = false
+      }
     },
     /** 一次性迁移:数据库为空且 localStorage 有旧数据时自动上传 */
     async migrateLegacy() {
