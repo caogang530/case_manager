@@ -1,42 +1,42 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'sidebar-hidden': !sidebarOpen }">
+    <aside v-show="sidebarOpen" id="branch-sidebar" class="branch-sidebar" aria-label="主导航">
+      <a class="brand" href="#/libraries" aria-label="Branch 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>Branch</strong></a>
+      <nav aria-label="工作区模块">
+        <a href="#/libraries" :aria-current="route.mode === 'library' ? 'page' : undefined" title="用例库"><span aria-hidden="true">▤</span><strong>用例库</strong></a>
+        <a href="#/plans" :aria-current="route.mode === 'plan' ? 'page' : undefined" title="测试计划"><span aria-hidden="true">☑</span><strong>测试计划</strong></a>
+      </nav>
+      <button class="sidebar-help" type="button" aria-label="键盘快捷键" title="键盘快捷键" @click="showDialog('help')"><span aria-hidden="true">?</span><strong>键盘快捷键</strong></button>
+    </aside>
+    <div class="branch-content">
+    <div v-if="doc" class="editor-shell" :class="{ 'editor-hidden': !inEditor }" :inert="!inEditor">
     <header class="topbar">
       <div class="heading-group">
-        <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>Branch</strong></div>
-        <span class="header-line"></span>
-        <div class="document-anchor" data-popup-anchor>
-          <button class="document-button" type="button" :aria-expanded="popup === 'documents'" aria-label="切换用例库或测试计划" @click="togglePopup('documents')">
-            <span class="document-title">{{ doc.name }}</span><span class="chevron" aria-hidden="true"></span>
-          </button>
-          <div v-if="popup === 'documents'" class="popup document-menu">
-            <div class="menu-caption">用例库</div>
-            <button v-for="item in libraries" :key="item.id" type="button" class="document-option" @click="switchDoc(item.id)"><span>{{ item.name }}</span><b v-if="item.id === doc.id">✓</b></button>
-            <button type="button" class="document-option create-option" @click="showDialog('create')">＋ 新建用例库</button>
-            <div class="menu-caption menu-separated">测试计划</div>
-            <button v-for="item in plans" :key="item.id" type="button" class="document-option" @click="switchDoc(item.id)"><span>{{ item.name }}</span><b v-if="item.id === doc.id">✓</b></button>
-          </div>
-        </div>
-        <span class="document-badge" :class="doc.mode">{{ isPlan ? '测试计划' : '用例库' }}</span>
+        <button class="icon-button sidebar-toggle" type="button" aria-controls="branch-sidebar" :aria-expanded="sidebarOpen"
+          :aria-label="sidebarLabel" :title="sidebarLabel" @click="toggleSidebar"><span aria-hidden="true"></span></button>
+        <nav class="editor-breadcrumb" aria-label="当前位置">
+          <a :href="moduleHref(doc.mode)">{{ moduleLabel }}</a><span aria-hidden="true">›</span>
+          <strong class="document-title">{{ doc.name }}</strong>
+        </nav>
       </div>
       <div class="head-actions">
         <span class="save-state" :class="saveState" role="status"><i></i>{{ saveState === 'saving' ? '保存中' : saveState === 'error' ? '保存失败' : '已保存在本机' }}</span>
         <button v-if="saveState === 'error'" class="quiet-button" type="button" @click="persist">重试</button>
-        <button class="button secondary import-button" type="button" @click="importInput?.click()"><span aria-hidden="true">↑</span> 导入</button>
-        <button class="button primary export-button" type="button" @click="exportDocument"><span aria-hidden="true">↓</span> 导出 XMind</button>
-        <div class="more-anchor" data-popup-anchor>
+        <button class="button secondary import-button" type="button" aria-label="导入 XMind" @click="importInput?.click()"><span aria-hidden="true">↑</span> <span class="action-text">导入</span></button>
+        <button v-if="doc" class="button primary export-button" type="button" aria-label="导出 XMind" @click="exportDocument()"><span aria-hidden="true">↓</span> <span class="action-text">导出 XMind</span></button>
+        <div v-if="doc" class="more-anchor" data-popup-anchor>
           <button class="icon-button more-button" type="button" aria-label="文档操作" :aria-expanded="popup === 'more'" @click="togglePopup('more')">···</button>
           <div v-if="popup === 'more'" class="popup more-menu">
             <button v-if="!isPlan" type="button" @click="showDialog('plan')">从用例库创建测试计划</button>
             <button type="button" @click="showDialog('rename')">重命名文档</button>
             <button type="button" @click="showDialog('help')">键盘快捷键</button>
-            <button type="button" class="danger-text" :disabled="workspace.docs.length <= 1" @click="showDialog('delete')">删除此文档</button>
+            <button type="button" class="danger-text" @click="showDialog('delete')">删除此文档</button>
           </div>
         </div>
       </div>
     </header>
-    <input ref="importInput" type="file" accept=".xmind,.zip" multiple hidden @change="openImport">
 
-    <div class="toolbar" aria-label="编辑和筛选工具">
+    <div v-if="doc" class="toolbar" aria-label="编辑和筛选工具">
       <div class="tool-group">
         <button class="button secondary add-button" type="button" :disabled="filtering" title="添加子节点 (Tab)" @click="addNode('child')">＋ <span>子节点</span></button>
         <button class="button secondary add-button" type="button" :disabled="filtering" title="添加同级节点 (Enter)" @click="addNode('sibling')">＋ <span>同级</span></button>
@@ -61,12 +61,12 @@
       </div>
     </div>
 
-    <main class="workspace" :class="{ 'with-inspector': inspectorOpen }" aria-label="Branch 工作区">
+    <main v-if="doc" class="workspace" :class="{ 'with-inspector': inspectorOpen }" aria-label="Branch 工作区">
       <div class="canvas-pane">
         <MapCanvas ref="map" :key="doc.id" :layout="layout" :selection="selected" :collapsed="effectiveCollapsed" :matches="matchSet" :results="doc.results"
           :current-match="currentMatch" :editing="editing" :plan="isPlan" :filtering="filtering" :total="counts.total"
           @select="selectNode" @clear="clearSelection" @select-many="selectMany" @edit="startEdit" @rename="renameNode" @edit-end="endEdit"
-          @fold="toggleFold" @node-status="openStatus" @move="moveNode" />
+          @fold="toggleFold" @node-status="openStatus" @move="moveNode" @measure="updateNodeSizes" @preview="previewImage" />
         <div class="canvas-caption"><span class="canvas-dot"></span>{{ filtering ? `${matchIds.length} 条匹配` : `${counts.total} 条用例` }}</div>
         <div v-if="filtering && !matchIds.length" class="map-empty"><strong>没有匹配节点</strong><button class="quiet-button" type="button" @click="clearFilters">清除筛选</button></div>
         <div v-if="selected.size > 1" class="selection-toolbar" data-popup-anchor><strong>已选 {{ selected.size }} 项</strong>
@@ -79,25 +79,41 @@
         @close="inspectorOpen = false" @update="updateProperty" @status="(key) => setStatus([activeNode?.id], key)" @image="attachImage" @preview="previewImage" />
     </main>
 
-    <footer class="statusbar">
+    <footer v-if="doc" class="statusbar">
       <div class="footer-summary"><strong>{{ counts.total }} 用例</strong><span v-if="isPlan" class="footer-divider"></span>
         <div v-if="isPlan" class="status-list"><button v-for="key in ['passed', 'failed', 'blocked', 'unexecuted', 'skipped']" :key="key" type="button" :class="key" :aria-pressed="statusFilters.includes(key)" @click="toggleFilter(statusFilters, key)"><i></i>{{ statuses[key].label }} <b>{{ counts[key] }}</b></button></div>
       </div>
       <div class="footer-tips"><span>双击编辑</span><span>Shift 拖拽框选</span><button type="button" class="quiet-button" @click="showDialog('help')" aria-label="快捷键帮助">?</button></div>
     </footer>
+    </div>
+    <DocumentManager v-if="ready && !inEditor" :key="route.mode" :mode="route.mode" :documents="route.mode === 'plan' ? plans : libraries" :libraries="libraries"
+      @import="importInput?.click()" @create="showDialog(route.mode === 'plan' ? 'plan' : 'create')" @plan="showDialog('plan', $event)"
+      @rename="showDialog('rename', $event)" @delete="showDialog('delete', $event)" @export="exportDocument($event)">
+      <template #navigation>
+        <button class="icon-button sidebar-toggle" type="button" aria-controls="branch-sidebar" :aria-expanded="sidebarOpen"
+          :aria-label="sidebarLabel" :title="sidebarLabel" @click="toggleSidebar"><span aria-hidden="true"></span></button>
+      </template>
+    </DocumentManager>
+    <div v-if="!ready" class="manager-loading" role="status">正在读取工作区…</div>
+    </div>
+    <input ref="importInput" type="file" accept=".xmind,.zip" multiple hidden @change="openImport">
 
     <Teleport to="body">
       <div v-if="statusMenu" class="popup status-menu" :style="{ left: `${statusMenu.x}px`, top: `${statusMenu.y}px` }" data-popup-anchor @keydown.esc.stop="statusMenu = null">
         <div class="menu-caption">{{ statusMenu.ids.length > 1 ? `标记 ${statusMenu.ids.length} 条用例` : '设置执行状态' }}</div>
         <button v-for="(item, key) in statuses" :key="key" type="button" @click="applyMenuStatus(key)"><span class="menu-status-icon" :class="key">{{ item.symbol }}</span>{{ item.label }}</button>
       </div>
-      <dialog ref="dialog" class="dialog" @close="dialogMode = ''">
-        <header><h2>{{ dialogTitle }}</h2><button class="icon-button" type="button" aria-label="关闭对话框" @click="dialog?.close()">×</button></header>
+      <dialog ref="dialog" class="dialog" aria-labelledby="branch-dialog-title" @close="dialogMode = ''">
+        <header><h2 id="branch-dialog-title">{{ dialogTitle }}</h2><button class="icon-button" type="button" aria-label="关闭对话框" @click="dialog?.close()">×</button></header>
         <form v-if="['create', 'plan', 'rename'].includes(dialogMode)" @submit.prevent="saveDialog">
           <label for="document-name">名称</label><input id="document-name" v-model.trim="dialogName" required maxlength="120">
-          <footer><button type="button" class="button secondary" @click="dialog?.close()">取消</button><button type="submit" class="button primary" :disabled="!dialogName">{{ dialogMode === 'rename' ? '保存' : '创建' }}</button></footer>
+          <template v-if="dialogMode === 'plan'">
+            <label for="plan-source" class="source-label">来源用例库</label>
+            <select id="plan-source" v-model="planSourceId" required><option v-for="item in libraries" :key="item.id" :value="item.id">{{ item.name }}</option></select>
+          </template>
+          <footer><button type="button" class="button secondary" @click="dialog?.close()">取消</button><button type="submit" class="button primary" :disabled="!dialogName || dialogMode === 'plan' && !planSourceId">{{ dialogMode === 'rename' ? '保存' : '创建' }}</button></footer>
         </form>
-        <div v-else-if="['delete', 'delete-nodes'].includes(dialogMode)" class="dialog-content"><p>{{ dialogMode === 'delete' ? `删除「${doc.name}」？` : `删除所选 ${removalIds.length} 个节点及其子节点？` }}</p>
+        <div v-else-if="['delete', 'delete-nodes'].includes(dialogMode)" class="dialog-content"><p>{{ dialogMode === 'delete' ? `删除「${dialogDocument?.name}」？` : `删除所选 ${removalIds.length} 个节点及其子节点？` }}</p>
           <footer><button type="button" class="button secondary" @click="dialog?.close()">取消</button><button type="button" class="button destructive" @click="confirmDelete">删除</button></footer></div>
         <dl v-else-if="dialogMode === 'help'" class="hotkeys"><div v-for="[label, keys] in shortcuts" :key="label"><dt>{{ label }}</dt><dd><kbd>{{ keys }}</kbd></dd></div></dl>
         <div v-else-if="dialogMode === 'image'" class="image-preview"><img :src="previewSrc" alt="节点附件"></div>
@@ -108,21 +124,36 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, watch } from 'vue'
 import MapCanvas from './MapCanvas.vue'
 import Inspector from './Inspector.vue'
+import DocumentManager from './DocumentManager.vue'
 import { casesIn, clone, countStatuses, demoWorkspace, duplicateTree, indexTree, makeNode, newId, projectTree, statuses } from './model.js'
 import { mapLayout } from './layout.js'
 import { readWorkspace, saveWorkspace } from './persistence.js'
 
 const workspace = ref(demoWorkspace())
-const doc = computed(() => workspace.value.docs.find(({ id }) => id === workspace.value.activeId) || workspace.value.docs[0])
+const ready = ref(false)
+const sidebarPreference = 'branch:sidebar-open'
+const sidebarOpen = ref(window.matchMedia('(min-width: 791px)').matches)
+try {
+  const savedSidebar = window.localStorage.getItem(sidebarPreference)
+  if (savedSidebar !== null) sidebarOpen.value = savedSidebar === 'true'
+} catch { /* The sidebar still works when storage is unavailable. */ }
+const sidebarLabel = computed(() => sidebarOpen.value ? '收起侧栏' : '展开侧栏')
+const route = ref({ mode: 'library', id: null })
+const activeModule = computed(() => workspace.value.module ?? workspace.value.docs.find(({ id }) => id === workspace.value.activeId)?.mode ?? 'library')
 const libraries = computed(() => workspace.value.docs.filter((item) => item.mode === 'library'))
 const plans = computed(() => workspace.value.docs.filter((item) => item.mode === 'plan'))
-const isPlan = computed(() => doc.value.mode === 'plan')
+const isPlan = computed(() => activeModule.value === 'plan')
+const moduleLabel = computed(() => isPlan.value ? '测试计划' : '用例库')
+const moduleDocuments = computed(() => isPlan.value ? plans.value : libraries.value)
+const doc = computed(() => moduleDocuments.value.find(({ id }) => id === workspace.value.activeId) || moduleDocuments.value[0])
+const inEditor = computed(() => ready.value && !!route.value.id && route.value.id === doc.value?.id)
 const counts = computed(() => countStatuses(doc.value))
-const treeIndex = computed(() => indexTree(doc.value.root))
+const treeIndex = computed(() => indexTree(doc.value?.root))
 const map = ref(null)
+const nodeSizes = shallowReactive(new Map())
 const selected = ref(new Set(['demo-case-2']))
 const collapsed = ref(new Set())
 const editing = ref(null)
@@ -140,7 +171,10 @@ const offerUndo = ref(false)
 const saveState = ref('ready')
 const dialog = ref(null)
 const dialogMode = ref('')
+const dialogDocumentId = ref(null)
+const dialogDocument = computed(() => workspace.value.docs.find(({ id }) => id === dialogDocumentId.value))
 const dialogName = ref('')
+const planSourceId = ref('')
 const removalIds = ref([])
 const previewSrc = ref('')
 const searchInput = ref(null)
@@ -155,7 +189,7 @@ let filterNavigation = 0
 
 const activeNode = computed(() => selected.value.size === 1 ? treeIndex.value.get([...selected.value][0])?.node : null)
 const selectedCases = computed(() => [...selected.value].filter((id) => treeIndex.value.get(id)?.node.kind === 'case'))
-const activeStatus = computed(() => doc.value.results[activeNode.value?.id] || 'unexecuted')
+const activeStatus = computed(() => doc.value?.results[activeNode.value?.id] || 'unexecuted')
 const activePath = computed(() => {
   const names = []
   let entry = treeIndex.value.get(activeNode.value?.id)
@@ -173,7 +207,7 @@ const activeAddress = computed(() => {
 const activeFilterCount = computed(() => statusFilters.value.length + priorityFilters.value.length)
 const filtering = computed(() => !!(query.value.trim() || activeFilterCount.value))
 const matches = computed(() => {
-  if (!filtering.value) return []
+  if (!doc.value || !filtering.value) return []
   const needle = query.value.trim().toLocaleLowerCase()
   const criteria = activeFilterCount.value
   const ids = []
@@ -197,7 +231,9 @@ const matchIds = computed(() => {
 const matchSet = computed(() => new Set(matchIds.value))
 const currentMatch = computed(() => matchIds.value[matchIndex.value] || null)
 const effectiveCollapsed = computed(() => filtering.value ? new Set() : collapsed.value)
-const layout = computed(() => mapLayout(projectTree(doc.value.root, filtering.value ? new Set(matches.value) : null), effectiveCollapsed.value))
+const layout = computed(() => doc.value
+  ? mapLayout(projectTree(doc.value.root, filtering.value ? new Set(matches.value) : null), effectiveCollapsed.value, nodeSizes)
+  : null)
 const dialogTitle = computed(() => ({ create: '新建用例库', plan: '新建测试计划', rename: '重命名文档', delete: '删除文档', 'delete-nodes': '删除节点', help: '键盘快捷键', image: '节点附件' })[dialogMode.value])
 const shortcuts = [
   ['添加子节点 / 同级节点', 'Tab / Enter'], ['编辑名称', 'F2 / 双击'], ['多选 / 范围选择', '⌘ Ctrl / Shift + 点击'],
@@ -216,13 +252,23 @@ watch([query, statusFilters, priorityFilters], () => {
     else map.value?.fit()
   })
 }, { deep: true })
-watch(layout, ({ entries }) => {
+watch(() => doc.value?.id, () => nodeSizes.clear(), { flush: 'sync' })
+watch(layout, (layout) => {
+  if (!layout) return
+  const { entries } = layout
   const visible = new Set(entries.map(({ node }) => node.id))
   const next = new Set([...selected.value].filter((id) => visible.has(id)))
   if (next.size !== selected.value.size) selected.value = next
   if (editing.value && !visible.has(editing.value)) editing.value = null
   if (matchIndex.value >= matchIds.value.length) matchIndex.value = matchIds.value.length - 1
 })
+
+function updateNodeSizes(sizes) {
+  for (const [id, size] of sizes) {
+    const previous = nodeSizes.get(id)
+    if (previous?.width !== size.width || previous?.height !== size.height) nodeSizes.set(id, size)
+  }
+}
 
 function notify(message, undoable = false) {
   notice.value = message
@@ -246,19 +292,21 @@ function edit(update, message) {
   past.value = [...past.value.slice(-24), checkpoint()]
   future.value = []
   update()
+  if (inEditor.value && doc.value) doc.value.updatedAt = Date.now()
   void persist()
   if (message) notify(message, true)
 }
 function restore(from, to, message) {
   if (!from.value.length) return
   const previous = from.value.at(-1)
-  const switched = previous.workspace.activeId !== workspace.value.activeId
+  const switched = previous.workspace.activeId !== workspace.value.activeId || previous.workspace.module !== workspace.value.module
   from.value = from.value.slice(0, -1)
   to.value = [...to.value, checkpoint()]
   if (switched) resetView()
   workspace.value = previous.workspace
   selected.value = new Set(previous.selected)
   editing.value = null
+  if (route.value.id && !workspace.value.docs.some(({ id }) => id === route.value.id)) goToModule(route.value.mode, null, true)
   void persist()
   notify(message)
 }
@@ -273,13 +321,46 @@ function resetView() {
   popup.value = ''
   statusMenu.value = null
 }
-function switchDoc(id) {
-  if (id === doc.value.id) { popup.value = ''; return }
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+  try { window.localStorage.setItem(sidebarPreference, String(sidebarOpen.value)) } catch { /* Use the current setting for this session. */ }
+}
+
+function activateDocument(mode, id) {
+  workspace.value.module = mode
+  workspace.value.activeId = id
+}
+function switchView(mode, id) {
   resetView()
   past.value = []
   future.value = []
-  workspace.value.activeId = id
+  activateDocument(mode, id)
   void persist()
+}
+const moduleHref = (mode) => mode === 'plan' ? '#/plans' : '#/libraries'
+
+function goToModule(mode, id = null, replace = false) {
+  const hash = `${moduleHref(mode)}${id ? `/${encodeURIComponent(id)}` : ''}`
+  if (window.location.hash !== hash) window.history[replace ? 'replaceState' : 'pushState'](null, '', hash)
+  syncRoute()
+}
+
+function syncRoute() {
+  if (!ready.value) return
+  popup.value = ''
+  statusMenu.value = null
+  const [, section, encodedId] = window.location.hash.slice(1).split('/')
+  const mode = section === 'plans' ? 'plan' : 'library'
+  let item
+  if (encodedId) {
+    try {
+      const id = decodeURIComponent(encodedId)
+      item = workspace.value.docs.find((item) => item.mode === mode && item.id === id)
+    } catch { /* Malformed document links return to the module list. */ }
+    if (!item) window.history.replaceState(null, '', moduleHref(mode))
+  }
+  route.value = { mode, id: item?.id ?? null }
+  if (item && item.id !== doc.value?.id) switchView(item.mode, item.id)
 }
 function togglePopup(key) { popup.value = popup.value === key ? '' : key; statusMenu.value = null }
 function clearFilters() {
@@ -424,11 +505,14 @@ async function attachImage(id, file) {
   reader.readAsDataURL(file)
 }
 
-function showDialog(mode) {
+function showDialog(mode, id = inEditor.value ? doc.value?.id : null) {
   popup.value = ''
   statusMenu.value = null
   dialogMode.value = mode
-  dialogName.value = mode === 'rename' ? doc.value.name : mode === 'plan' ? `${doc.value.name} · 回归计划` : ''
+  dialogDocumentId.value = id
+  const source = dialogDocument.value?.mode === 'library' ? dialogDocument.value : libraries.value[0]
+  planSourceId.value = source?.id ?? ''
+  dialogName.value = mode === 'rename' ? dialogDocument.value?.name || '' : mode === 'plan' && source ? `${source.name} · 回归计划` : ''
   nextTick(() => {
     dialog.value?.showModal()
     const field = dialog.value?.querySelector('input')
@@ -440,17 +524,22 @@ function saveDialog() {
   const mode = dialogMode.value
   const name = dialogName.value.trim()
   if (!name) return
-  if (mode === 'rename') edit(() => { doc.value.name = name }, '名称已更新')
+  if (mode === 'rename') {
+    const item = dialogDocument.value
+    if (item && item.name !== name) edit(() => { item.name = name; item.updatedAt = Date.now() }, '名称已更新')
+  }
   else {
-    const source = doc.value
-    const created = { id: newId(), name, root: mode === 'plan' ? clone(source.root) : makeNode(name, 'module'), mode: mode === 'plan' ? 'plan' : 'library', results: {} }
+    const source = libraries.value.find((item) => item.id === planSourceId.value)
+    if (mode === 'plan' && !source) return
+    const created = { id: newId(), name, root: mode === 'plan' ? clone(source.root) : makeNode(name, 'module'), mode: mode === 'plan' ? 'plan' : 'library', results: {}, updatedAt: Date.now() }
     if (mode === 'plan') created.sourceId = source.id
     edit(() => {
       resetView()
       workspace.value.docs.unshift(created)
-      workspace.value.activeId = created.id
+      activateDocument(created.mode, created.id)
       selectOne(created.root.id)
     }, mode === 'plan' ? '测试计划已创建' : '用例库已创建')
+    goToModule(created.mode, created.id)
   }
   dialog.value?.close()
 }
@@ -475,13 +564,17 @@ function requestRemove() {
 }
 function confirmDelete() {
   if (dialogMode.value === 'delete-nodes') deleteNodes(removalIds.value)
-  else if (workspace.value.docs.length > 1) {
-    const id = doc.value.id
+  else if (dialogDocument.value) {
+    const { id, mode } = dialogDocument.value
+    const wasActive = doc.value?.id === id
     edit(() => {
-      resetView()
       workspace.value.docs = workspace.value.docs.filter((item) => item.id !== id)
-      workspace.value.activeId = workspace.value.docs[0].id
+      if (wasActive) {
+        resetView()
+        activateDocument(mode, moduleDocuments.value[0]?.id ?? null)
+      }
     }, '文档已删除')
+    if (route.value.id === id) goToModule(mode, null, true)
   }
   dialog.value?.close()
 }
@@ -498,19 +591,25 @@ async function openImport(event) {
     for (const file of files) {
       try { documents.push(...await importMaps(file)) } catch (error) { problems.push(`${file.name}：${error.message}`) }
     }
-    if (documents.length) edit(() => {
-      resetView()
-      workspace.value.docs.unshift(...documents)
-      workspace.value.activeId = documents[0].id
-    }, `已导入 ${documents.length} 张导图${problems.length ? `，${problems.length} 个文件失败` : ''}`)
+    if (documents.length) {
+      edit(() => {
+        resetView()
+        const updatedAt = Date.now()
+        workspace.value.docs.unshift(...documents.map((item) => ({ ...item, updatedAt })))
+        activateDocument(documents[0].mode, documents[0].id)
+      }, `已导入 ${documents.length} 张导图${problems.length ? `，${problems.length} 个文件失败` : ''}`)
+      goToModule(documents[0].mode, documents[0].id)
+    }
     else notify(problems[0] || '导入失败')
   } catch (error) { notify(error.message || '导入失败') }
   finally { importing = false }
 }
-async function exportDocument() {
+async function exportDocument(id = doc.value?.id) {
+  const item = workspace.value.docs.find((item) => item.id === id)
+  if (!item) return
   try {
     const { exportMap } = await import('./interchange.js')
-    const snapshot = clone(doc.value)
+    const snapshot = clone(item)
     const url = URL.createObjectURL(await exportMap(snapshot))
     const link = document.createElement('a')
     link.href = url
@@ -544,7 +643,7 @@ function handleKeys(event) {
   const typing = event.target.closest?.('input, textarea, select, [contenteditable]')
   const onCanvas = !!event.target.closest?.('.map-surface') && !event.target.closest?.('button, .minimap')
   if (key === 'Escape' && (popup.value || statusMenu.value)) { popup.value = ''; statusMenu.value = null; return }
-  if ((key === '/' && !mod && !typing || mod && key.toLowerCase() === 'f')) { event.preventDefault(); searchInput.value?.focus(); return }
+  if (inEditor.value && (key === '/' && !mod && !typing || mod && key.toLowerCase() === 'f')) { event.preventDefault(); searchInput.value?.focus(); return }
   if (typing || statusMenu.value || popup.value) return
   if (mod && key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return }
   if (!onCanvas || event.altKey) return
@@ -596,18 +695,21 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeys)
   window.addEventListener('paste', handlePaste)
   window.addEventListener('pointerdown', closePopupOnOutside)
+  window.addEventListener('hashchange', syncRoute)
   try {
     const saved = await readWorkspace()
-    if (!writeVersion && saved?.docs?.length) {
+    if (!writeVersion && Array.isArray(saved?.docs)) {
       workspace.value = saved
-      if (doc.value.id !== 'demo-plan') clearSelection()
+      if (doc.value?.id !== 'demo-plan') clearSelection()
     }
   } catch { saveState.value = 'error' }
+  finally { ready.value = true; syncRoute() }
 })
 onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
   window.removeEventListener('keydown', handleKeys)
   window.removeEventListener('paste', handlePaste)
   window.removeEventListener('pointerdown', closePopupOnOutside)
+  window.removeEventListener('hashchange', syncRoute)
 })
 </script>

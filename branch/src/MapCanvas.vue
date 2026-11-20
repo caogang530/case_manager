@@ -6,28 +6,35 @@
     <div class="map-world" :style="worldStyle">
       <div v-for="entry in layout.entries" :key="entry.node.id" class="map-slot" :class="[colorOf(entry), entry.kind]"
         :style="{ left: `${entry.x}px`, top: `${entry.y}px`, width: `${entry.width}px`, height: `${entry.height}px` }">
-        <div class="map-node" :class="{ selected: selection.has(entry.node.id), matched: matches.has(entry.node.id), current: currentMatch === entry.node.id, 'drop-target': dropTarget === entry.node.id }"
+        <div v-measure-node="entry.node.id" class="map-node" :class="{ selected: selection.has(entry.node.id), matched: matches.has(entry.node.id), current: currentMatch === entry.node.id, 'drop-target': dropTarget === entry.node.id }"
+          :style="editing === entry.node.id ? { width: `${entry.width}px` } : undefined"
           :data-node-id="entry.node.id" :aria-pressed="selection.has(entry.node.id)" role="button" tabindex="0"
           :draggable="entry.depth > 0 && editing !== entry.node.id && !hand && !space"
           @dragstart="dragStart(entry, $event)" @dragover="dragOver(entry, $event)" @dragleave="dragLeave(entry, $event)"
           @drop.prevent="dropOn(entry)" @dragend="stopDrag"
           @pointerdown="nodePointerDown($event)" @click="clickNode(entry.node.id, $event)" @dblclick.stop="editNode(entry.node.id)"
-          @keydown.enter.stop.prevent="emit('select', entry.node.id, $event)" @keydown.space.stop.prevent="emit('select', entry.node.id, $event)">
-          <span v-if="entry.kind === 'root'" class="root-mark" aria-hidden="true">✳</span>
-          <span v-else-if="entry.kind === 'module'" class="module-mark" aria-hidden="true"></span>
-          <span v-else class="node-dot" aria-hidden="true"></span>
-          <input v-if="editing === entry.node.id" :ref="focusTitle" class="node-input" aria-label="编辑节点名称" v-model="title"
-            @pointerdown.stop @click.stop @dblclick.stop @keydown.stop="editKeydown" @blur="commitTitle(false)">
-          <span v-else class="node-text" :title="entry.node.title"><strong>{{ entry.node.title }}</strong>
-            <small v-if="entry.kind === 'root'">{{ total }} 条测试用例</small>
-          </span>
-          <span v-if="entry.kind === 'case' && entry.node.priority" class="priority-chip" :class="entry.node.priority.toLowerCase()">{{ entry.node.priority }}</span>
-          <button v-if="entry.kind === 'case' && plan" class="node-status" :class="statusOf(entry.node.id)" type="button"
-            :aria-label="`${entry.node.title}的状态，${statuses[statusOf(entry.node.id)].label}`" :title="`设置状态 · ${statuses[statusOf(entry.node.id)].label}`"
-            @pointerdown.stop @click.stop="emit('node-status', entry.node.id, $event.currentTarget.getBoundingClientRect())" @dblclick.stop>
-            {{ statuses[statusOf(entry.node.id)].symbol }}
+          @keydown.enter.self.stop.prevent="emit('select', entry.node.id, $event)" @keydown.space.self.stop.prevent="emit('select', entry.node.id, $event)">
+          <div class="node-header">
+            <span v-if="entry.kind === 'root'" class="root-mark" aria-hidden="true">✳</span>
+            <span v-else-if="entry.kind === 'module'" class="module-mark" aria-hidden="true"></span>
+            <span v-else class="node-dot" aria-hidden="true"></span>
+            <textarea v-if="editing === entry.node.id" :ref="focusTitle" class="node-input" aria-label="编辑节点名称" rows="1" v-model="title"
+              @input="resizeTitle($event.currentTarget)" @pointerdown.stop @click.stop @dblclick.stop @keydown.stop="editKeydown" @blur="commitTitle(false)"></textarea>
+            <span v-else class="node-text"><strong>{{ entry.node.title }}</strong>
+              <small v-if="entry.kind === 'root'">{{ total }} 条测试用例</small>
+            </span>
+            <span v-if="entry.kind === 'case' && entry.node.priority" class="priority-chip" :class="entry.node.priority.toLowerCase()">{{ entry.node.priority }}</span>
+            <button v-if="entry.kind === 'case' && plan" class="node-status" :class="statusOf(entry.node.id)" type="button"
+              :aria-label="`${entry.node.title}的状态，${statuses[statusOf(entry.node.id)].label}`" :title="`设置状态 · ${statuses[statusOf(entry.node.id)].label}`"
+              @pointerdown.stop @click.stop="emit('node-status', entry.node.id, $event.currentTarget.getBoundingClientRect())" @dblclick.stop>
+              {{ statuses[statusOf(entry.node.id)].symbol }}
+            </button>
+            <span v-if="entry.kind === 'module' && !entry.node.children.length" class="module-empty" aria-hidden="true">—</span>
+          </div>
+          <button v-if="entry.node.image" type="button" class="node-image" aria-label="放大节点图片" @pointerdown.stop
+            @click.stop="emit('preview', entry.node.image)" @dblclick.stop>
+            <img :src="entry.node.image" alt="节点图片" draggable="false">
           </button>
-          <span v-if="entry.kind === 'module' && !entry.node.children.length" class="module-empty" aria-hidden="true">—</span>
         </div>
         <button v-if="entry.depth && entry.node.children.length && !filtering" class="fold-button" type="button"
           :aria-expanded="!collapsed.has(entry.node.id)" :aria-label="`${collapsed.has(entry.node.id) ? '展开' : '折叠'}${entry.node.title}`"
@@ -66,7 +73,7 @@ const props = defineProps({
   matches: { type: Set, required: true }, results: { type: Object, required: true },
   currentMatch: String, editing: String, plan: Boolean, filtering: Boolean, total: Number,
 })
-const emit = defineEmits(['select', 'clear', 'rename', 'edit', 'edit-end', 'fold', 'node-status', 'select-many', 'move'])
+const emit = defineEmits(['select', 'clear', 'rename', 'edit', 'edit-end', 'fold', 'node-status', 'select-many', 'move', 'measure', 'preview'])
 const surface = ref(null)
 const lines = ref(null)
 const minimap = ref(null)
@@ -83,11 +90,25 @@ let titleId = null
 let dragId = null
 let miniPointer = null
 let observer
+let autoFit = true
+let centeredNode = null
 let drawFrame = 0
 let firstFit = true
 let suppressClick = false
 const touches = new Map()
 let pinching = false
+const nodeSizes = new ResizeObserver((changes) => {
+  const sizes = changes.flatMap(({ target }) => {
+    const id = target.dataset.nodeId
+    if (props.editing === id) return []
+    return [[id, { width: target.offsetWidth, height: target.offsetHeight }]]
+  })
+  if (sizes.length) emit('measure', sizes)
+})
+const vMeasureNode = {
+  mounted: (element) => nodeSizes.observe(element, { box: 'border-box' }),
+  beforeUnmount: (element) => nodeSizes.unobserve(element),
+}
 
 const strokes = { iris: '#ad9de2', ocean: '#78b5d0', peach: '#dfa484', mint: '#83b7a2', rose: '#d991a7', gold: '#d1b274' }
 const worldStyle = computed(() => ({ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }))
@@ -103,7 +124,12 @@ function focusTitle(input) {
   if (input && input !== document.activeElement) {
     input.focus({ preventScroll: true })
     input.select()
+    resizeTitle(input)
   }
+}
+function resizeTitle(input) {
+  input.style.height = 'auto'
+  input.style.height = `${input.scrollHeight}px`
 }
 function commitTitle(returnFocus) {
   if (!titleId) return
@@ -120,7 +146,7 @@ function cancelTitle() {
 }
 function editKeydown(event) {
   if (event.isComposing || event.keyCode === 229) return
-  if (event.key === 'Enter') {
+  if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     commitTitle(true)
   } else if (event.key === 'Escape') {
@@ -130,6 +156,8 @@ function editKeydown(event) {
 }
 
 function fit() {
+  autoFit = true
+  centeredNode = null
   const { width, height } = viewport
   if (!width || !height) return
   const padding = width < 550 ? 50 : 104
@@ -144,11 +172,15 @@ function focusNode(id, force = false) {
   if (!entry) return
   const bounds = { x: entry.x * camera.scale + camera.x, y: entry.y * camera.scale + camera.y }
   if (!force && bounds.x >= 25 && bounds.y >= 36 && bounds.x + entry.width * camera.scale <= viewport.width - 25 && bounds.y + entry.height * camera.scale <= viewport.height - 74) return
+  autoFit = false
+  centeredNode = force ? id : null
   if (force) camera.scale = Math.max(camera.scale, Math.min(1, (viewport.width - 65) / entry.width))
   camera.x = viewport.width / 2 - (entry.x + entry.width / 2) * camera.scale
   camera.y = (viewport.height - 35) / 2 - (entry.y + entry.height / 2) * camera.scale
 }
 function setZoom(scale, x = viewport.width / 2, y = viewport.height / 2) {
+  autoFit = false
+  centeredNode = null
   const next = Math.max(.08, Math.min(2.4, scale))
   const ratio = next / camera.scale
   camera.x = x - (x - camera.x) * ratio
@@ -161,6 +193,8 @@ function wheel(event) {
     const box = surface.value.getBoundingClientRect()
     setZoom(camera.scale * Math.exp(-Math.max(-100, Math.min(100, event.deltaY)) * .007), event.clientX - box.left, event.clientY - box.top)
   } else {
+    autoFit = false
+    centeredNode = null
     const multiplier = event.deltaMode === 1 ? 16 : 1
     camera.x -= event.deltaX * multiplier
     camera.y -= event.deltaY * multiplier
@@ -210,6 +244,8 @@ function moveGesture(event) {
   if (!active.moved && Math.hypot(dx, dy) < 4) return
   active.moved = true
   if (active.type === 'pan') {
+    autoFit = false
+    centeredNode = null
     camera.x = active.tx + dx
     camera.y = active.ty + dy
   } else {
@@ -339,6 +375,8 @@ function drawMini() {
   if (right > left && bottom > top) ctx.strokeRect(left, top, right - left, bottom - top)
 }
 function miniTo(event) {
+  autoFit = false
+  centeredNode = null
   const box = minimap.value.getBoundingClientRect()
   const { x, y, scale } = miniGeometry()
   camera.x = viewport.width / 2 - ((event.clientX - box.left) * 168 / box.width - x) / scale * camera.scale
@@ -355,16 +393,20 @@ function queueDraw() {
   drawFrame = requestAnimationFrame(() => { drawFrame = 0; drawEdges(); drawMini() })
 }
 watch([camera, viewport, () => props.layout, minimapOpen], queueDraw, { flush: 'post' })
+watch(() => props.layout, () => {
+  if (autoFit) fit()
+  else if (centeredNode && centeredNode === props.currentMatch) focusNode(centeredNode, true)
+}, { flush: 'post' })
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
     const { width, height } = entry.contentRect
     if (!firstFit) { camera.x += (width - viewport.width) / 2; camera.y += (height - viewport.height) / 2 }
     Object.assign(viewport, { width, height })
-    if (firstFit && width && height) { firstFit = false; fit() }
+    if (width && height && (firstFit || autoFit)) { firstFit = false; fit() }
   })
   observer.observe(surface.value)
   nextTick(queueDraw)
 })
-onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(drawFrame) })
+onBeforeUnmount(() => { observer?.disconnect(); nodeSizes.disconnect(); cancelAnimationFrame(drawFrame) })
 defineExpose({ fit, focusNode, zoom, focus: () => surface.value?.focus({ preventScroll: true }) })
 </script>
