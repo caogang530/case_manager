@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "branch:dev": "vite --config branch/vite.config.js",
+    "branch:build": "vite build --config branch/vite.config.js",
     "preview": "vite preview"
   },
   "dependencies": {
