@@ -99,16 +99,74 @@ def row_to_plan(row: sqlite3.Row) -> dict:
     }
 
 
+def leaf_ids(root: dict):
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        children = node.get("children") or []
+        if children:
+            stack.extend(children)
+        else:
+            yield node.get("id")
+
+
+def library_summary(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+        "caseCount": sum(1 for _ in leaf_ids(json.loads(row["root"]))),
+    }
+
+
+def percentage(count: int, total: int) -> float:
+    return ((count * 2000 + total) // (2 * total)) / 10 if total else 0.0
+
+
+def plan_summary(row: sqlite3.Row) -> dict:
+    root = json.loads(row["root"])
+    results = json.loads(row["results"])
+    counts = dict.fromkeys(("unexecuted", "passed", "failed", "blocked", "skipped"), 0)
+    for node_id in leaf_ids(root):
+        status = results.get(node_id)
+        counts[status if isinstance(status, str) and status in counts else "unexecuted"] += 1
+    total = sum(counts.values())
+    executed = total - counts["unexecuted"]
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "libraryId": row["library_id"],
+        "libraryName": row["library_name"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+        "stats": {
+            **counts,
+            "total": total,
+            "executed": executed,
+            "execRate": percentage(executed, total),
+            "passRate": percentage(counts["passed"], total),
+        },
+    }
+
+
 # ---------------- 用例库 ----------------
 
 
 @app.get("/api/libraries")
-def list_libraries() -> list[dict]:
+def list_libraries(summary: bool = False) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM libraries ORDER BY updated_at DESC"
-        ).fetchall()
-    return [row_to_library(r) for r in rows]
+        convert = library_summary if summary else row_to_library
+        return [convert(row) for row in conn.execute("SELECT * FROM libraries ORDER BY updated_at DESC")]
+
+
+@app.get("/api/libraries/{lib_id}")
+def get_library(lib_id: str) -> dict:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM libraries WHERE id = ?", (lib_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "用例库不存在")
+        return row_to_library(row)
 
 
 @app.post("/api/libraries", status_code=201)
@@ -156,10 +214,19 @@ def delete_library(lib_id: str) -> None:
 
 
 @app.get("/api/plans")
-def list_plans() -> list[dict]:
+def list_plans(summary: bool = False) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM plans ORDER BY updated_at DESC").fetchall()
-    return [row_to_plan(r) for r in rows]
+        convert = plan_summary if summary else row_to_plan
+        return [convert(row) for row in conn.execute("SELECT * FROM plans ORDER BY updated_at DESC")]
+
+
+@app.get("/api/plans/{plan_id}")
+def get_plan(plan_id: str) -> dict:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM plans WHERE id = ?", (plan_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "测试计划不存在")
+        return row_to_plan(row)
 
 
 @app.post("/api/plans", status_code=201)
@@ -237,4 +304,6 @@ if os.path.isdir(DIST_DIR):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(
+        "server.main:app", host="127.0.0.1", port=8000, reload=True, timeout_graceful_shutdown=5
+    )

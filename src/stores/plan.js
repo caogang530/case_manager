@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { api, readLegacy, clearLegacy } from './data'
-import { cloneTreeWithNewIds, computeStats, genId } from '../utils/tree'
+import { cloneTreeWithNewIds, genId } from '../utils/tree'
 
 export const STATUS = {
   unexecuted: { label: '未执行', icon: '·', type: 'info' },
@@ -25,10 +25,6 @@ export const usePlanStore = defineStore('plan', {
   }),
   getters: {
     getById: (state) => (id) => state.plans.find((p) => p.id === id),
-    statsOf: (state) => (id) => {
-      const plan = state.plans.find((p) => p.id === id)
-      return plan ? computeStats(plan.root, plan.results) : null
-    },
   },
   actions: {
     async load() {
@@ -88,35 +84,27 @@ export const usePlanStore = defineStore('plan', {
       return created
     },
 
+    async detail(id) {
+      const plan = this.getById(id)
+      return plan?.root ? plan : api.getPlan(id)
+    },
+
     async rename(id, name) {
       const plan = this.getById(id)
       if (!plan) return
-      plan.name = name
-      plan.updatedAt = Date.now()
-      try {
-        await api.updatePlan(id, { name })
-      } catch (err) {
-        reportError('重命名', err)
-      }
+      Object.assign(plan, await api.updatePlan(id, { name }))
     },
 
     async remove(id) {
+      await api.deletePlan(id)
       this.plans = this.plans.filter((p) => p.id !== id)
-      try {
-        await api.deletePlan(id)
-      } catch (err) {
-        reportError('删除', err)
-      }
     },
 
     /** 保存草稿:整体替换计划的树和结果 */
     async update(id, { root, results }) {
       const plan = this.getById(id)
-      if (!plan) return
-      plan.root = root
-      plan.results = results
-      plan.updatedAt = Date.now()
-      await api.updatePlan(id, { root, results })
+      if (!plan) throw new Error('测试计划不存在')
+      Object.assign(plan, await api.updatePlan(id, { root, results }))
     },
   },
 })

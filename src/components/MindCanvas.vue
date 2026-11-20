@@ -2,28 +2,28 @@
   <div
     ref="viewportRef"
     class="mind-viewport"
+    data-node-surface
+    tabindex="-1"
     :class="{ panning: isPanning }"
     @wheel.prevent="onWheel"
-    @mousedown="onMouseDown"
+    @pointerdown="onPointerDown"
   >
     <div ref="canvasRef" class="mind-canvas" :style="canvasStyle">
       <slot />
     </div>
-    <!-- 悬浮层(不随画布缩放/平移) -->
-    <slot name="overlay" />
     <div class="canvas-controls">
-      <button class="ctrl-btn" title="缩小" @click="zoomBy(-0.15)">−</button>
-      <span class="ctrl-scale" title="点击重置为 100%" @click="resetZoom">
+      <button class="ctrl-btn" type="button" aria-label="缩小" @click="zoomBy(-0.15)">−</button>
+      <button class="ctrl-scale" type="button" aria-label="重置缩放" @click="resetZoom">
         {{ Math.round(scale * 100) }}%
-      </span>
-      <button class="ctrl-btn" title="放大" @click="zoomBy(0.15)">＋</button>
-      <button class="ctrl-btn ctrl-fit" title="缩放以适应全部内容" @click="fit">适应</button>
+      </button>
+      <button class="ctrl-btn" type="button" aria-label="放大" @click="zoomBy(0.15)">＋</button>
+      <button class="ctrl-btn ctrl-fit" type="button" title="缩放以适应全部内容" @click="fit">适应</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const emit = defineEmits(['blank-click'])
 
@@ -75,27 +75,30 @@ function onWheel(e) {
 let moved = 0
 let lastX = 0
 let lastY = 0
+let activePointer = null
 
-function onMouseDown(e) {
-  if (e.button !== 0) return
+function onPointerDown(e) {
+  if (e.button !== 0 || activePointer !== null) return
+  if (!e.target.closest('button, input, select')) viewportRef.value?.focus({ preventScroll: true })
   // 从节点/面板/控件上按下时不触发平移
   if (
     e.target.closest('.mind-node-box') ||
-    e.target.closest('.selected-panel') ||
     e.target.closest('.canvas-controls')
   ) {
     return
   }
   isPanning.value = true
+  activePointer = e.pointerId
   moved = 0
   lastX = e.clientX
   lastY = e.clientY
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerUp)
 }
 
-function onMouseMove(e) {
-  if (!isPanning.value) return
+function onPointerMove(e) {
+  if (activePointer !== e.pointerId) return
   const dx = e.clientX - lastX
   const dy = e.clientY - lastY
   moved += Math.abs(dx) + Math.abs(dy)
@@ -105,16 +108,18 @@ function onMouseMove(e) {
   lastY = e.clientY
 }
 
-function onMouseUp() {
+function onPointerUp(event) {
+  if (activePointer !== event.pointerId) return
+  if (event.type === 'pointerup' && moved < 4) emit('blank-click')
   stopTrackingPan()
-  // 几乎没移动视为点击空白 → 取消选中
-  if (isPanning.value && moved < 4) emit('blank-click')
-  isPanning.value = false
 }
 
 function stopTrackingPan() {
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerUp)
+  activePointer = null
+  isPanning.value = false
 }
 
 onBeforeUnmount(stopTrackingPan)
@@ -134,7 +139,7 @@ function fit() {
   const h = content.scrollHeight
   if (!w || !h) return
   const s = Math.min(
-    MAX_SCALE,
+    1.15,
     Math.max(MIN_SCALE, Math.min(vp.clientWidth / w, vp.clientHeight / h) * 0.95)
   )
   scale.value = s
@@ -158,4 +163,5 @@ function focusNode(id) {
 }
 
 defineExpose({ fit, resetZoom, focusNode })
+onMounted(() => fit())
 </script>

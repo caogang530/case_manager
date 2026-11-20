@@ -3,6 +3,7 @@
 async function request(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
+    ...(!options.method && { signal: AbortSignal.timeout(30_000) }),
     ...options,
   })
   if (!res.ok) {
@@ -18,13 +19,15 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  getLibraries: () => request('/api/libraries'),
+  getLibraries: () => request('/api/libraries?summary=true'),
+  getLibrary: (id) => request(`/api/libraries/${encodeURIComponent(id)}`),
   createLibrary: (lib) => request('/api/libraries', { method: 'POST', body: JSON.stringify(lib) }),
   updateLibrary: (id, patch) =>
     request(`/api/libraries/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   deleteLibrary: (id) => request(`/api/libraries/${id}`, { method: 'DELETE' }),
 
-  getPlans: () => request('/api/plans'),
+  getPlans: () => request('/api/plans?summary=true'),
+  getPlan: (id) => request(`/api/plans/${encodeURIComponent(id)}`),
   createPlan: (plan) => request('/api/plans', { method: 'POST', body: JSON.stringify(plan) }),
   updatePlan: (id, patch) =>
     request(`/api/plans/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),

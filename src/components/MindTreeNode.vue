@@ -17,25 +17,7 @@
     >
       <div class="mind-node-main">
         <!-- 叶子 case 状态徽章(计划模式) -->
-        <span v-if="isCase && mode === 'plan'" class="case-status-control" @click.stop @dblclick.stop>
-          <el-dropdown trigger="click" :persistent="false" @command="emit('set-status', node, $event)">
-            <button
-              type="button"
-              class="case-status"
-              :class="status"
-              :aria-label="`${node.title}，当前状态：${STATUS[status].label}，更改状态`"
-            >
-              {{ STATUS[status].label }} <el-icon aria-hidden="true"><ArrowDown /></el-icon>
-            </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item v-for="(option, value) in STATUS" :key="value" :command="value" :disabled="value === status">
-                  {{ option.label }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </span>
+        <StatusPicker v-if="isCase && mode === 'plan'" :status="status" :title="node.title" @change="emit('set-status', node, $event)" />
 
         <!-- 节点图标 -->
         <span v-if="node.icon && ICON_BY_KEY[node.icon]" class="node-icon">
@@ -43,7 +25,7 @@
         </span>
 
         <!-- 优先级徽章 -->
-        <span v-if="node.priority" class="case-priority" :class="node.priority.toLowerCase()">
+        <span v-if="node.priority" class="priority-tag" :class="node.priority.toLowerCase()">
           {{ node.priority }}
         </span>
 
@@ -73,12 +55,8 @@
 
         <!-- 操作按钮 -->
         <span class="node-ops" @dblclick.stop>
-          <el-tooltip content="添加子节点" placement="top">
-            <span class="op-btn" @click.stop="emit('add-child', node)">＋</span>
-          </el-tooltip>
-          <el-tooltip v-if="depth > 0" content="删除节点" placement="top">
-            <span class="op-btn" @click.stop="emit('remove', node)">✕</span>
-          </el-tooltip>
+          <button v-if="canAdd" class="op-btn" type="button" aria-label="添加子节点" title="添加子节点" @click.stop="emit('add-child', node)">＋</button>
+          <button v-if="depth > 0" class="op-btn" type="button" aria-label="删除节点" title="删除节点" @click.stop="emit('remove', node)">✕</button>
         </span>
       </div>
 
@@ -104,6 +82,7 @@
           :node="child"
           :depth="depth + 1"
           :mode="mode"
+          :can-add="canAdd"
           :results="results"
           :selected-id="selectedId"
           :selected-ids="selectedIds"
@@ -122,8 +101,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowDown } from '@element-plus/icons-vue'
-import { STATUS } from '../stores/plan'
+import StatusPicker from './StatusPicker.vue'
 import { computeNodeStats } from '../utils/tree'
 import { ICON_BY_KEY } from '../utils/nodeProps'
 
@@ -131,6 +109,7 @@ const props = defineProps({
   node: { type: Object, required: true },
   depth: { type: Number, default: 0 },
   mode: { type: String, default: 'library' }, // 'library' | 'plan'
+  canAdd: { type: Boolean, default: true },
   results: { type: Object, default: () => ({}) },
   selectedId: { type: String, default: null },
   selectedIds: { type: Set, default: null },

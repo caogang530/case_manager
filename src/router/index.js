@@ -1,14 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-const router = createRouter({
+const index = () => import('../views/ResourceIndex.vue')
+const workspace = () => import('../views/EditorWorkspace.vue')
+
+export default createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/libraries' },
-    { path: '/libraries', name: 'libraries', component: () => import('../views/LibraryList.vue') },
-    { path: '/libraries/:id', name: 'library-detail', component: () => import('../views/LibraryDetail.vue') },
-    { path: '/plans', name: 'plans', component: () => import('../views/PlanList.vue') },
-    { path: '/plans/:id', name: 'plan-detail', component: () => import('../views/PlanDetail.vue') },
+    { path: '/libraries', name: 'libraries', component: index, props: { mode: 'library' } },
+    { path: '/libraries/:id', name: 'library-detail', component: workspace, props: { mode: 'library' } },
+    { path: '/plans', name: 'plans', component: index, props: { mode: 'plan' } },
+    { path: '/plans/:id', name: 'plan-detail', component: workspace, props: { mode: 'plan' } },
+    { path: '/:pathMatch(.*)*', redirect: '/libraries' },
   ],
 })
-
-export default router
