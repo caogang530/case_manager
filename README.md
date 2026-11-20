@@ -1,5 +1,7 @@
 # Casework · 测试用例工作台
 
+在 `codex/verdict-greenfield` 分支上，运行 `npm --prefix verdict start` 启动 Verdict。[Verdict 工作台说明](verdict/README.md)
+
 用例按模块组织，每个叶子节点是一条用例。用例库可以导入和导出 XMind 文件，测试计划从用例库创建快照并独立记录执行结果。
 
 Vue 3、Pinia 和 Element Plus 提供前端工作台，FastAPI 和 SQLite 提供数据存储。现有数据库可以直接使用。
