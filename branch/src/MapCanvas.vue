@@ -6,7 +6,7 @@
     <div class="map-world" :style="worldStyle">
       <div v-for="entry in layout.entries" :key="entry.node.id" class="map-slot" :class="[colorOf(entry), entry.kind]"
         :style="{ left: `${entry.x}px`, top: `${entry.y}px`, width: `${entry.width}px`, height: `${entry.height}px` }">
-        <div v-measure-node="entry.node.id" class="map-node" :class="{ selected: selection.has(entry.node.id), matched: matches.has(entry.node.id), current: currentMatch === entry.node.id, 'drop-target': dropTarget === entry.node.id }"
+        <div v-measure-node="entry.node.id" class="map-node" :class="[plan && entry.kind === 'case' && statusOf(entry.node.id), { selected: selection.has(entry.node.id), matched: matches.has(entry.node.id), current: currentMatch === entry.node.id, 'drop-target': dropTarget === entry.node.id }]"
           :style="editing === entry.node.id ? { width: `${entry.width}px` } : undefined"
           :data-node-id="entry.node.id" :aria-pressed="selection.has(entry.node.id)" role="button" tabindex="0"
           :draggable="entry.depth > 0 && editing !== entry.node.id && !hand && !space"
@@ -18,6 +18,8 @@
             <span v-if="entry.kind === 'root'" class="root-mark" aria-hidden="true">✳</span>
             <span v-else-if="entry.kind === 'module'" class="module-mark" aria-hidden="true"></span>
             <span v-else class="node-dot" aria-hidden="true"></span>
+            <span v-for="icon in iconsFor(entry.node.icons)" :key="icon.id" class="node-icon-glyph" role="img"
+              :aria-label="icon.label" :title="icon.label" :style="{ color: icon.color }">{{ icon.glyph }}</span>
             <textarea v-if="editing === entry.node.id" :ref="focusTitle" class="node-input" aria-label="编辑节点名称" rows="1" v-model="title"
               @input="resizeTitle($event.currentTarget)" @pointerdown.stop @click.stop @dblclick.stop @keydown.stop="editKeydown" @blur="commitTitle(false)"></textarea>
             <span v-else class="node-text"><strong>{{ entry.node.title }}</strong>
@@ -67,6 +69,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { statuses } from './model.js'
+import { iconsFor } from './nodeIcons.js'
 
 const props = defineProps({
   layout: { type: Object, required: true }, selection: { type: Set, required: true }, collapsed: { type: Set, required: true },
@@ -98,11 +101,7 @@ let suppressClick = false
 const touches = new Map()
 let pinching = false
 const nodeSizes = new ResizeObserver((changes) => {
-  const sizes = changes.flatMap(({ target }) => {
-    const id = target.dataset.nodeId
-    if (props.editing === id) return []
-    return [[id, { width: target.offsetWidth, height: target.offsetHeight }]]
-  })
+  const sizes = changes.map(({ target }) => [target.dataset.nodeId, { width: target.offsetWidth, height: target.offsetHeight }])
   if (sizes.length) emit('measure', sizes)
 })
 const vMeasureNode = {
@@ -121,11 +120,14 @@ watch(() => props.editing, (id) => {
 })
 
 function focusTitle(input) {
-  if (input && input !== document.activeElement) {
+  if (!input || input === document.activeElement) return
+  // Measure after Vue inserts the textarea and sets its value.
+  nextTick(() => {
+    if (!input.isConnected) return
+    resizeTitle(input)
     input.focus({ preventScroll: true })
     input.select()
-    resizeTitle(input)
-  }
+  })
 }
 function resizeTitle(input) {
   input.style.height = 'auto'
@@ -395,6 +397,7 @@ function queueDraw() {
 watch([camera, viewport, () => props.layout, minimapOpen], queueDraw, { flush: 'post' })
 watch(() => props.layout, () => {
   if (autoFit) fit()
+  else if (props.editing) focusNode(props.editing)
   else if (centeredNode && centeredNode === props.currentMatch) focusNode(centeredNode, true)
 }, { flush: 'post' })
 onMounted(() => {

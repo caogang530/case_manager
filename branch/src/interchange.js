@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { makeNode, newId, palette, statuses } from './model.js'
+import { iconByMarker, iconsFor } from './nodeIcons.js'
 
 const mime = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg', webp: 'webp', gif: 'gif', bmp: 'bmp', svg: 'svg+xml' }
 const resultMarkers = { passed: 'task-done', failed: 'symbol-wrong', blocked: 'symbol-pause', skipped: 'symbol-minus' }
@@ -47,10 +48,14 @@ export async function importMaps(file) {
       node.note = text(extra.note ?? topic.xcmExtra?.note ?? topic.notes?.plain?.content)
       if (palette.includes(extra.color)) node.color = extra.color
       if (statuses[extra.status] && node.kind === 'case' && extra.status !== 'unexecuted') results[node.id] = extra.status
+      const markerIcons = []
       for (const { markerId } of topic.markers || []) {
         if (/^priority-[1-3]$/.test(markerId)) node.priority = `P${Number(markerId.at(-1)) - 1}`
         if (byMarker[markerId] && node.kind === 'case') results[node.id] ||= byMarker[markerId]
+        if (iconByMarker.has(markerId)) markerIcons.push(iconByMarker.get(markerId))
       }
+      const icons = iconsFor(Array.isArray(extra.icons) ? extra.icons : markerIcons)
+      if (icons.length) node.icons = icons.map(({ id }) => id)
       const path = text(topic.image?.src).replace(/^xap:/, '')
       const type = mime[path.split('.').at(-1)?.toLowerCase()]
       const entry = type && path.startsWith('resources/') && zip.file(path)
@@ -74,6 +79,11 @@ export async function exportMap(doc) {
     const markers = []
     if (/^P[0-2]$/.test(node.priority)) markers.push(`priority-${Number(node.priority[1]) + 1}`)
     if (resultMarkers[execution]) markers.push(resultMarkers[execution])
+    const icons = iconsFor(node.icons)
+    if (icons.length) result.branch.icons = icons.map(({ id }) => id)
+    for (const { marker } of icons) {
+      if (marker) markers.push(marker)
+    }
     if (markers.length) result.markers = markers.map((markerId) => ({ markerId }))
     const notes = [node.steps, node.expected, node.note].filter(Boolean).join('\n\n')
     if (notes) result.notes = { plain: { content: notes } }
